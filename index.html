@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="/branding/scch-schwarz-icon.png" />
+    <script>
+      try {
+        const saved = JSON.parse(localStorage.getItem('codeshape.v1') || '{}')
+        if (saved.theme === 'dark' || saved.theme === 'light') {
+          document.documentElement.dataset.theme = saved.theme
+          const icon = document.querySelector('link[rel="icon"]')
+          if (icon) icon.href = saved.theme === 'dark' ? '/branding/scch-weiss-icon.png' : '/branding/scch-schwarz-icon.png'
+        }
+        if (saved.lang === 'en' || saved.lang === 'de') document.documentElement.lang = saved.lang
+      } catch (error) {}
+    </script>
+    <title>CodeShape</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
