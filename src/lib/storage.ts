@@ -12,6 +12,9 @@ export type Persisted = {
   editorWidth?: number
   chatOpen?: boolean
   chatHeight?: number
+  treeRatio?: number
+  editorRatio?: number
+  chatRatio?: number
   renderMode?: RenderMode
   projection?: Projection
   planes?: Planes
@@ -36,6 +39,9 @@ export function loadPersisted(): Persisted {
     if (typeof data.githubUrl !== 'string') delete data.githubUrl
     if (!isSafeRel(data.filesPath)) delete data.filesPath
     if (!isSafeRel(data.sourcePath)) delete data.sourcePath
+    if (!isLayoutRatio(data.treeRatio)) delete data.treeRatio
+    if (!isLayoutRatio(data.editorRatio)) delete data.editorRatio
+    if (!isLayoutRatio(data.chatRatio)) delete data.chatRatio
     return data
   } catch {
     return {}
@@ -45,6 +51,10 @@ export function loadPersisted(): Persisted {
 export function savePersisted(data: Partial<Persisted>) {
   const prev = loadPersisted()
   localStorage.setItem(KEY, JSON.stringify({ ...prev, ...data }))
+}
+
+function isLayoutRatio(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0.08 && value <= 0.7
 }
 
 function isSafeRel(value: unknown): value is string {

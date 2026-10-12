@@ -18,9 +18,9 @@ import type { PlaneKey, Planes, Projection, RenderMode, SavedView, Theme } from 
 import { Viewport, type ViewportHandle } from './viewer/Viewport'
 
 const renderModes: RenderMode[] = ['shaded-edges', 'shaded', 'translucent', 'wire']
-const editorMin = 320
-const editorMax = 1520
-const editorDefault = 880
+const treeRatioDefault = 0.115
+const editorRatioDefault = 0.295
+const chatRatioDefault = 0.18
 
 function isTyping(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
@@ -54,10 +54,13 @@ export function App() {
   const [sourcePath, setSourcePath] = useState(saved.sourcePath ?? '')
   const [includeError, setIncludeError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [treeWidth, setTreeWidth] = useState(clamp(saved.treeWidth ?? 286, 220, 460))
-  const [editorWidth, setEditorWidth] = useState(clamp(saved.editorWidth && saved.editorWidth !== 440 ? saved.editorWidth : editorDefault, editorMin, editorMax))
+  const [treeRatio, setTreeRatio] = useState(saved.treeRatio ?? treeRatioDefault)
+  const [editorRatio, setEditorRatio] = useState(saved.editorRatio ?? editorRatioDefault)
+  const [chatRatio, setChatRatio] = useState(saved.chatRatio ?? chatRatioDefault)
+  const [treeWidth, setTreeWidth] = useState(() => clamp(window.innerWidth * (saved.treeRatio ?? treeRatioDefault), 200, 720))
+  const [editorWidth, setEditorWidth] = useState(() => clamp(window.innerWidth * (saved.editorRatio ?? editorRatioDefault), 320, 1600))
   const [chatOpen, setChatOpen] = useState(saved.chatOpen !== false)
-  const [chatHeight, setChatHeight] = useState(clamp(saved.chatHeight ?? 196, 120, 420))
+  const [chatHeight, setChatHeight] = useState(() => clamp(window.innerHeight * (saved.chatRatio ?? chatRatioDefault), 96, 480))
   const [renderMode, setRenderMode] = useState<RenderMode>(saved.renderMode && renderModes.includes(saved.renderMode) ? saved.renderMode : 'shaded-edges')
   const [projection, setProjection] = useState<Projection>(saved.projection === 'ortho' ? 'ortho' : 'perspective')
   const [planes, setPlanes] = useState<Planes>(saved.planes ?? { origin: false, top: false, front: false, right: false })
@@ -68,6 +71,10 @@ export function App() {
   const [help, setHelp] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const viewportRef = useRef<ViewportHandle>(null)
+  const workspaceRef = useRef<HTMLDivElement>(null)
+  const stageRef = useRef<HTMLDivElement>(null)
+  const dragging = useRef<'tree' | 'editor' | 'chat' | null>(null)
+  const layoutRef = useRef({ tree: treeWidth, editor: editorWidth, chat: chatHeight })
   const codeRef = useRef(code)
   const sourcePathRef = useRef(sourcePath)
   const expandGen = useRef(0)
@@ -82,8 +89,37 @@ export function App() {
   }, [theme, docName, lang])
 
   useEffect(() => {
-    savePersisted({ code, theme, lang, docName, editorOpen, treeOpen, sideMode, githubUrl, filesPath, sourcePath, treeWidth, editorWidth, chatOpen, chatHeight, renderMode, projection, planes, ...(view ? { view } : {}) })
-  }, [code, theme, lang, docName, editorOpen, treeOpen, sideMode, githubUrl, filesPath, sourcePath, treeWidth, editorWidth, chatOpen, chatHeight, renderMode, projection, planes, view])
+    savePersisted({ code, theme, lang, docName, editorOpen, treeOpen, sideMode, githubUrl, filesPath, sourcePath, treeRatio, editorRatio, chatRatio, chatOpen, renderMode, projection, planes, ...(view ? { view } : {}) })
+  }, [code, theme, lang, docName, editorOpen, treeOpen, sideMode, githubUrl, filesPath, sourcePath, treeRatio, editorRatio, chatRatio, chatOpen, renderMode, projection, planes, view])
+
+  useEffect(() => {
+    const workspace = workspaceRef.current
+    const stage = stageRef.current
+    if (!workspace) return
+    const apply = () => {
+      if (dragging.current) return
+      const width = workspace.clientWidth
+      if (width > 0) {
+        const tree = clamp(width * treeRatio, 200, Math.max(220, width * 0.28))
+        const editor = clamp(width * editorRatio, 320, Math.max(360, width * 0.62))
+        layoutRef.current.tree = tree
+        layoutRef.current.editor = editor
+        setTreeWidth(tree)
+        setEditorWidth(editor)
+      }
+      const height = stage?.clientHeight ?? 0
+      if (height > 0) {
+        const chat = clamp(height * chatRatio, 96, Math.max(120, height * 0.5))
+        layoutRef.current.chat = chat
+        setChatHeight(chat)
+      }
+    }
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(workspace)
+    if (stage) observer.observe(stage)
+    return () => observer.disconnect()
+  }, [treeRatio, editorRatio, chatRatio])
 
   useEffect(() => {
     const gen = ++expandGen.current
@@ -201,16 +237,35 @@ export function App() {
 
   const startResize = (which: 'tree' | 'editor' | 'chat', event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault()
+    dragging.current = which
     const horizontal = which !== 'chat'
     const origin = horizontal ? event.clientX : event.clientY
     const start = which === 'tree' ? treeWidth : which === 'editor' ? editorWidth : chatHeight
     const move = (pointer: globalThis.PointerEvent) => {
       const delta = (horizontal ? pointer.clientX : pointer.clientY) - origin
-      if (which === 'tree') setTreeWidth(clamp(start + delta, 220, 460))
-      else if (which === 'editor') setEditorWidth(clamp(start - delta, editorMin, editorMax))
-      else setChatHeight(clamp(start - delta, 120, 420))
+      const width = workspaceRef.current?.clientWidth ?? window.innerWidth
+      const height = stageRef.current?.clientHeight ?? window.innerHeight
+      if (which === 'tree') {
+        const next = clamp(start + delta, 200, Math.max(220, width * 0.28))
+        layoutRef.current.tree = next
+        setTreeWidth(next)
+      } else if (which === 'editor') {
+        const next = clamp(start - delta, 320, Math.max(360, width * 0.62))
+        layoutRef.current.editor = next
+        setEditorWidth(next)
+      } else {
+        const next = clamp(start - delta, 96, Math.max(120, height * 0.5))
+        layoutRef.current.chat = next
+        setChatHeight(next)
+      }
     }
     const up = () => {
+      const width = workspaceRef.current?.clientWidth ?? window.innerWidth
+      const height = stageRef.current?.clientHeight ?? window.innerHeight
+      dragging.current = null
+      if (which === 'tree') setTreeRatio(clamp(layoutRef.current.tree / width, 0.08, 0.28))
+      else if (which === 'editor') setEditorRatio(clamp(layoutRef.current.editor / width, 0.16, 0.62))
+      else setChatRatio(clamp(layoutRef.current.chat / height, 0.1, 0.5))
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       document.body.classList.remove('is-resizing', 'is-resizing-row')
@@ -297,7 +352,7 @@ export function App() {
         onToggleLang={toggle}
         onHelp={() => setHelp(true)}
       />
-      <div className="cs-workspace">
+      <div className="cs-workspace" ref={workspaceRef}>
         <SideRail mode={sideMode} open={treeOpen} onSelect={selectSide} />
         {treeOpen ? (
           <div className="cs-tree-wrap" style={{ width: treeWidth }}>
@@ -322,7 +377,7 @@ export function App() {
           </div>
         ) : null}
         {treeOpen ? <div className="cs-resizer" onPointerDown={(event) => startResize('tree', event)} /> : null}
-        <div className="cs-stage">
+        <div className="cs-stage" ref={stageRef}>
           <div className="cs-stage-view">
             <Viewport
               ref={viewportRef}
