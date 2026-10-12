@@ -1,4 +1,5 @@
 import * as modeling from '@jscad/modeling'
+import { toCommonJs } from '../lib/jscadModule'
 import { applyParamDefaults } from '../lib/params'
 import type { BuildRequest, BuildResponse, DisplayPart, ParamDef, ParamValue } from '../types'
 
@@ -7,20 +8,32 @@ if (!host.process) host.process = { env: {} }
 
 const { geom3, geom2, path2 } = modeling.geometries
 
+function withDefault(value: unknown) {
+  if (value == null || (typeof value !== 'object' && typeof value !== 'function')) return value
+  const record = value as { default?: unknown }
+  if (record.default == null) record.default = value
+  return value
+}
+
 function localRequire(id: string): unknown {
-  if (id === '@jscad/modeling') return modeling
+  if (id === '@jscad/modeling') return withDefault(modeling)
   if (id.startsWith('@jscad/modeling/')) {
-    const key = id.slice('@jscad/modeling/'.length)
-    const value = (modeling as Record<string, unknown>)[key]
-    if (value) return value
+    const parts = id.slice('@jscad/modeling/'.length).replace(/\.js$/, '').split('/').filter((part) => part && part !== 'src')
+    let current: unknown = modeling
+    for (const part of parts) {
+      if (current == null || (typeof current !== 'object' && typeof current !== 'function')) {
+        current = undefined
+        break
+      }
+      current = (current as Record<string, unknown>)[part]
+    }
+    if (current != null) return withDefault(current)
   }
-  throw new Error(`Module not available: ${id}`)
+  throw new Error(`Modul nicht verfügbar: ${id}`)
 }
 
 function explain(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
-  if (message.includes('import')) return 'errNoImport'
-  return message
+  return error instanceof Error ? error.message : String(error)
 }
 
 type UserApi = {
@@ -30,9 +43,10 @@ type UserApi = {
 
 function loadScript(code: string): UserApi {
   const module = { exports: {} as UserApi }
-  const source = `${code}
+  const source = `${toCommonJs(code)}
 ;if (typeof main === 'function' && !module.exports.main) module.exports.main = main;
 if (typeof getParameterDefinitions === 'function' && !module.exports.getParameterDefinitions) module.exports.getParameterDefinitions = getParameterDefinitions;
+if (!module.exports.main && typeof module.exports.default === 'function') module.exports.main = module.exports.default;
 return module.exports;`
   return new Function('require', 'module', 'exports', source)(localRequire, module, module.exports) as UserApi
 }
@@ -111,7 +125,11 @@ function collect(value: unknown, out: unknown[]) {
   out.push(value)
 }
 
-function build(request: BuildRequest): BuildResponse {
+function isPromise(value: unknown): value is Promise<unknown> {
+  return typeof value === 'object' && value !== null && typeof (value as Promise<unknown>).then === 'function'
+}
+
+async function build(request: BuildRequest): Promise<BuildResponse> {
   const started = performance.now()
   try {
     const api = loadScript(request.code)
@@ -120,11 +138,12 @@ function build(request: BuildRequest): BuildResponse {
     }
     let definitions: ParamDef[] = []
     if (typeof api.getParameterDefinitions === 'function') {
-      const defs = api.getParameterDefinitions()
+      const defs = await Promise.resolve(api.getParameterDefinitions())
       if (Array.isArray(defs)) definitions = defs
     }
     const params = applyParamDefaults(definitions, request.params)
-    const result = api.main(params)
+    const produced = api.main(params)
+    const result = isPromise(produced) ? await produced : produced
     const geometries: unknown[] = []
     collect(result, geometries)
     const parts: DisplayPart[] = []
@@ -154,7 +173,7 @@ function build(request: BuildRequest): BuildResponse {
 
 self.onmessage = (event: MessageEvent<BuildRequest>) => {
   if (event.data?.type !== 'build') return
-  const response = build(event.data)
+  void build(event.data).then((response) => {
   const transfer: Transferable[] = []
   if (response.ok) {
     for (const part of response.parts) {
@@ -163,4 +182,7 @@ self.onmessage = (event: MessageEvent<BuildRequest>) => {
     }
   }
   self.postMessage(response, { transfer })
+  }).catch((error: unknown) => {
+    self.postMessage({ id: event.data.id, ok: false, error: explain(error) })
+  })
 }

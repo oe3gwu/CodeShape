@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { useI18n, type MessageKey } from '../i18n'
 import type { DisplayPart, PlaneKey, Planes } from '../types'
-import { Icon } from './icons'
+import { Icon, type IconName } from './icons'
 
 type Props = {
   docName: string
@@ -15,20 +16,15 @@ type Props = {
   onTogglePart: (id: string) => void
 }
 
-const features: Array<{ key: PlaneKey; label: MessageKey; swatch: string }> = [
-  { key: 'origin', label: 'origin', swatch: '' },
-  { key: 'top', label: 'planeTop', swatch: '#2f6fed' },
-  { key: 'front', label: 'planeFront', swatch: '#d4534e' },
-  { key: 'right', label: 'planeRight', swatch: '#2f9d5a' },
+const features: Array<{ key: PlaneKey; label: MessageKey; icon: IconName }> = [
+  { key: 'origin', label: 'origin', icon: 'point' },
+  { key: 'top', label: 'planeTop', icon: 'plane' },
+  { key: 'front', label: 'planeFront', icon: 'plane' },
+  { key: 'right', label: 'planeRight', icon: 'plane' },
 ]
 
 function matches(text: string, query: string) {
   return text.toLowerCase().includes(query.trim().toLowerCase())
-}
-
-function cssColor(color: [number, number, number, number]) {
-  const channel = (value: number) => Math.round(Math.min(1, Math.max(0, value)) * 255)
-  return `rgb(${channel(color[0])} ${channel(color[1])} ${channel(color[2])})`
 }
 
 export function FeaturePanel({
@@ -44,55 +40,56 @@ export function FeaturePanel({
   onTogglePart,
 }: Props) {
   const { t } = useI18n()
-  const shownFeatures = features.filter((item) => matches(t(item.label), query))
+  const [folderOpen, setFolderOpen] = useState(true)
   const scriptName = `${docName}.js`
-  const showScript = matches(scriptName, query) || matches(t('script'), query)
-  const shownParts = parts.filter((part) => matches(part.name, query))
-  const featureCount = shownFeatures.length + (showScript ? 1 : 0)
+  const trimmed = query.trim()
+  const groupNameHit = trimmed.length > 0 && matches(t('standardGeometry'), query)
+  const shownFeatures = features.filter((item) => !trimmed || groupNameHit || matches(t(item.label), query))
+  const showScript = !trimmed || matches(scriptName, query) || matches(t('script'), query)
+  const shownParts = parts.filter((part) => !trimmed || matches(part.name, query))
+  const featureCount = shownFeatures.length + (showScript ? 1 : 0) + shownParts.length
+  const groupOpen = folderOpen || trimmed.length > 0
+  const showGroup = shownFeatures.length > 0
 
   return (
     <aside className="cs-features">
-      <div className="cs-panel-head">
-        <span>{t('features')}</span>
-        <span className="cs-count">{featureCount}</span>
-      </div>
       <label className="cs-search">
-        <Icon name="search" size={14} />
-        <input value={query} onChange={(event) => onQuery(event.target.value)} placeholder={t('search')} />
+        <Icon name="filter" size={14} />
+        <input value={query} onChange={(event) => onQuery(event.target.value)} placeholder={t('filterByName')} />
       </label>
+      <div className="cs-feature-title">{t('features')} ({featureCount})</div>
       <div className="cs-tree">
-        {shownFeatures.map((item) => (
-          <div className="cs-row" key={item.key}>
-            <span className="cs-swatch" style={item.swatch ? { background: item.swatch } : undefined}>
-              {item.key === 'origin' ? <Icon name="origin" size={14} /> : null}
+        {showGroup ? (
+          <button className="cs-feature-row is-folder" onClick={() => setFolderOpen((open) => !open)}>
+            <span className={`cs-twist ${groupOpen ? '' : 'is-collapsed'}`}>
+              <Icon name="chevron" size={14} />
             </span>
+            <span className="cs-row-label">{t('standardGeometry')}</span>
+          </button>
+        ) : null}
+        {showGroup && groupOpen ? shownFeatures.map((item) => (
+          <div className="cs-feature-row is-child" key={item.key}>
+            <span className="cs-feature-icon"><Icon name={item.icon} size={15} /></span>
             <span className="cs-row-label">{t(item.label)}</span>
             <button
-              className={`cs-eye ${planes[item.key] ? 'is-on' : ''}`}
+              className={`cs-eye ${planes[item.key] ? 'is-on' : 'is-off'}`}
               title={planes[item.key] ? t('hideItem') : t('showItem')}
               onClick={() => onTogglePlane(item.key)}
             >
               <Icon name={planes[item.key] ? 'eye' : 'eyeOff'} size={14} />
             </button>
           </div>
-        ))}
+        )) : null}
         {showScript ? (
-          <button className="cs-row is-button is-script" onClick={() => onSelect(null)}>
-            <span className="cs-swatch is-code"><Icon name="code" size={13} /></span>
+          <button className="cs-feature-row" onClick={() => onSelect(null)}>
+            <span className="cs-feature-icon is-script"><Icon name="code" size={15} /></span>
             <span className="cs-row-label">{scriptName}</span>
           </button>
         ) : null}
-        {featureCount === 0 ? <div className="cs-empty">{t('noMatches')}</div> : null}
-      </div>
-      <div className="cs-panel-head cs-parts-head">
-        <span>{t('parts')}</span>
-        <span className="cs-count">{shownParts.length}</span>
-      </div>
-      <div className="cs-tree cs-parts">
         {shownParts.map((part) => (
           <div
             key={part.id}
-            className={`cs-row is-button ${selectedId === part.id ? 'is-selected' : ''}`}
+            className={`cs-feature-row ${selectedId === part.id ? 'is-selected' : ''}`}
             onClick={() => onSelect(part.id)}
             role="button"
             tabIndex={0}
@@ -100,10 +97,10 @@ export function FeaturePanel({
               if (event.key === 'Enter') onSelect(part.id)
             }}
           >
-            <span className="cs-swatch is-part" style={{ background: cssColor(part.color) }} />
+            <span className="cs-feature-icon"><Icon name="cube" size={15} /></span>
             <span className="cs-row-label">{part.name}</span>
             <button
-              className={`cs-eye ${hidden[part.id] ? '' : 'is-on'}`}
+              className={`cs-eye ${hidden[part.id] ? 'is-off' : 'is-on'}`}
               title={hidden[part.id] ? t('showItem') : t('hideItem')}
               onClick={(event) => {
                 event.stopPropagation()
@@ -114,7 +111,7 @@ export function FeaturePanel({
             </button>
           </div>
         ))}
-        {shownParts.length === 0 ? <div className="cs-empty">{t('noParts')}</div> : null}
+        {featureCount === 0 ? <div className="cs-empty">{t('noMatches')}</div> : null}
       </div>
     </aside>
   )

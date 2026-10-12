@@ -2,8 +2,10 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { useDesign } from './hooks/useDesign'
 import { EditorWindow } from './layout/EditorWindow'
 import { FeaturePanel } from './layout/FeaturePanel'
+import { GithubBrowser } from './layout/GithubBrowser'
 import { InferenceWindow } from './layout/InferenceWindow'
 import { ParameterDialog } from './layout/ParameterDialog'
+import { SideRail } from './layout/SideRail'
 import { TopBar } from './layout/TopBar'
 import { displayError, useI18n, type MessageKey } from './i18n'
 import { downloadBlob, meshesToObj, meshesToStl } from './lib/export'
@@ -39,6 +41,8 @@ export function App() {
   const [docName, setDocName] = useState(saved.docName || SAMPLE_NAME)
   const [editorOpen, setEditorOpen] = useState(saved.editorOpen !== false)
   const [treeOpen, setTreeOpen] = useState(saved.treeOpen !== false)
+  const [sideMode, setSideMode] = useState<'local' | 'github'>(saved.sideMode === 'github' ? 'github' : 'local')
+  const [githubUrl, setGithubUrl] = useState(saved.githubUrl ?? '')
   const [treeWidth, setTreeWidth] = useState(clamp(saved.treeWidth ?? 286, 220, 460))
   const [editorWidth, setEditorWidth] = useState(clamp(saved.editorWidth ?? 440, 320, 760))
   const [chatOpen, setChatOpen] = useState(saved.chatOpen !== false)
@@ -62,8 +66,8 @@ export function App() {
   }, [theme, docName, lang])
 
   useEffect(() => {
-    savePersisted({ code, theme, lang, docName, editorOpen, treeOpen, treeWidth, editorWidth, chatOpen, chatHeight, renderMode, projection, planes, ...(view ? { view } : {}) })
-  }, [code, theme, lang, docName, editorOpen, treeOpen, treeWidth, editorWidth, chatOpen, chatHeight, renderMode, projection, planes, view])
+    savePersisted({ code, theme, lang, docName, editorOpen, treeOpen, sideMode, githubUrl, treeWidth, editorWidth, chatOpen, chatHeight, renderMode, projection, planes, ...(view ? { view } : {}) })
+  }, [code, theme, lang, docName, editorOpen, treeOpen, sideMode, githubUrl, treeWidth, editorWidth, chatOpen, chatHeight, renderMode, projection, planes, view])
 
   const save = () => downloadBlob(new Blob([code], { type: 'text/javascript' }), `${docName || 'CodeShape'}.js`)
 
@@ -156,6 +160,21 @@ export function App() {
     savePersisted({ view: next })
   }
 
+  const selectSide = (next: 'local' | 'github') => {
+    if (treeOpen && sideMode === next) setTreeOpen(false)
+    else {
+      setSideMode(next)
+      setTreeOpen(true)
+    }
+  }
+
+  const openGithubModel = (nextCode: string, nextName: string) => {
+    setCode(nextCode)
+    setDocName(nextName)
+    setEditorOpen(true)
+    resetView()
+  }
+
   const shownError = design.error ? displayError(design.error, t) : null
 
   return (
@@ -189,24 +208,27 @@ export function App() {
         onHelp={() => setHelp(true)}
       />
       <div className="cs-workspace">
+        <SideRail mode={sideMode} open={treeOpen} onSelect={selectSide} />
         {treeOpen ? (
           <div className="cs-tree-wrap" style={{ width: treeWidth }}>
-            <FeaturePanel
-              docName={docName}
-              query={query}
-              onQuery={setQuery}
-              planes={planes}
-              onTogglePlane={togglePlane}
-              parts={design.parts}
-              hidden={hidden}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              onTogglePart={(id) => setHidden((prev) => ({ ...prev, [id]: !prev[id] }))}
-            />
+            {sideMode === 'github' ? (
+              <GithubBrowser url={githubUrl} onUrl={setGithubUrl} onOpen={openGithubModel} />
+            ) : (
+              <FeaturePanel
+                docName={docName}
+                query={query}
+                onQuery={setQuery}
+                planes={planes}
+                onTogglePlane={togglePlane}
+                parts={design.parts}
+                hidden={hidden}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                onTogglePart={(id) => setHidden((prev) => ({ ...prev, [id]: !prev[id] }))}
+              />
+            )}
           </div>
-        ) : (
-          <button className="cs-rail" title={t('featureList')} onClick={() => setTreeOpen(true)}>{t('features')}</button>
-        )}
+        ) : null}
         {treeOpen ? <div className="cs-resizer" onPointerDown={(event) => startResize('tree', event)} /> : null}
         <div className="cs-stage">
           <div className="cs-stage-view">

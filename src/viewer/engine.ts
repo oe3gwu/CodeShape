@@ -426,11 +426,18 @@ export class Engine {
     const material = part.mesh.material as THREE.MeshStandardMaterial
     const wire = this.renderMode === 'wire'
     const translucent = this.renderMode === 'translucent'
+    const seeThrough = translucent || part.baseOpacity < 0.999
     material.wireframe = wire
-    material.transparent = translucent || part.baseOpacity < 0.999
+    material.transparent = seeThrough
     material.opacity = translucent ? Math.min(part.baseOpacity, 0.42) : part.baseOpacity
-    material.depthWrite = !translucent
+    material.depthWrite = !seeThrough
     material.needsUpdate = true
+    part.mesh.renderOrder = seeThrough ? 2 : 0
+    const lineMaterial = part.lines.material as THREE.LineBasicMaterial
+    lineMaterial.transparent = part.baseOpacity < 0.999
+    lineMaterial.opacity = part.baseOpacity
+    lineMaterial.depthWrite = part.baseOpacity >= 0.999
+    lineMaterial.needsUpdate = true
     part.lines.visible = this.renderMode === 'shaded-edges'
   }
 

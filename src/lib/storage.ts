@@ -16,6 +16,8 @@ export type Persisted = {
   projection?: Projection
   planes?: Planes
   view?: SavedView
+  sideMode?: 'local' | 'github'
+  githubUrl?: string
 }
 
 const KEY = 'codeshape.v1'
@@ -28,6 +30,8 @@ export function loadPersisted(): Persisted {
     if (!data || typeof data !== 'object') return {}
     data.planes = readPlanes(data.planes)
     data.view = readView(data.view)
+    if (data.sideMode !== 'local' && data.sideMode !== 'github') delete data.sideMode
+    if (typeof data.githubUrl !== 'string') delete data.githubUrl
     return data
   } catch {
     return {}

@@ -13,6 +13,11 @@ const de = {
   exportStl: 'Exportieren als STL',
   exportObj: 'Exportieren als OBJ',
   featureList: 'Feature-Liste',
+  github: 'GitHub',
+  githubUrl: 'GitHub-Adresse',
+  githubEmpty: 'Eine Repository-Adresse öffnen.',
+  githubFailed: 'Das Repository konnte nicht gelesen werden.',
+  includeMissing: 'Include nicht gefunden',
   show: 'einblenden',
   hide: 'ausblenden',
   scriptWindow: 'Skriptfenster',
@@ -26,6 +31,8 @@ const de = {
   shortcuts: 'Tastenkürzel',
   closeWindow: 'Fenster schließen',
   search: 'Suchen',
+  filterByName: 'Nach Name oder Typ filtern',
+  standardGeometry: 'Standardgeometrie',
   workspace: 'Haupt',
   rebuild: 'Neu aufbauen',
   parts: 'Teile',
@@ -43,10 +50,10 @@ const de = {
   right: 'Rechts',
   top: 'Oben',
   bottom: 'Unten',
-  origin: 'Ursprung',
-  planeTop: 'Ebene Oben',
-  planeFront: 'Ebene Vorne',
-  planeRight: 'Ebene Rechts',
+  origin: 'Origin',
+  planeTop: 'Top',
+  planeFront: 'Front',
+  planeRight: 'Right',
   showItem: 'Einblenden',
   hideItem: 'Ausblenden',
   noMatches: 'Keine Treffer',
@@ -74,7 +81,6 @@ const de = {
   errWorker: 'Der Aufbau ist im Worker fehlgeschlagen.',
   errNoMain: 'Das Skript enthält keine Funktion main().',
   errNoGeometry: 'Das Skript hat keine Geometrie zurückgegeben.',
-  errNoImport: 'import ist hier nicht verfügbar. Bitte require(\'@jscad/modeling\') verwenden.',
 }
 
 const en: typeof de = {
@@ -88,6 +94,11 @@ const en: typeof de = {
   exportStl: 'Export as STL',
   exportObj: 'Export as OBJ',
   featureList: 'Feature list',
+  github: 'GitHub',
+  githubUrl: 'GitHub address',
+  githubEmpty: 'Open a repository address.',
+  githubFailed: 'The repository could not be read.',
+  includeMissing: 'Include not found',
   show: 'show',
   hide: 'hide',
   scriptWindow: 'Script window',
@@ -101,6 +112,8 @@ const en: typeof de = {
   shortcuts: 'Shortcuts',
   closeWindow: 'Close window',
   search: 'Search',
+  filterByName: 'Filter by name or type',
+  standardGeometry: 'Default geometry',
   workspace: 'Main',
   rebuild: 'Rebuild',
   parts: 'Parts',
@@ -119,9 +132,9 @@ const en: typeof de = {
   top: 'Top',
   bottom: 'Bottom',
   origin: 'Origin',
-  planeTop: 'Top plane',
-  planeFront: 'Front plane',
-  planeRight: 'Right plane',
+  planeTop: 'Top',
+  planeFront: 'Front',
+  planeRight: 'Right',
   showItem: 'Show',
   hideItem: 'Hide',
   noMatches: 'No matches',
@@ -149,13 +162,12 @@ const en: typeof de = {
   errWorker: 'The build failed in the worker.',
   errNoMain: 'The script has no main() function.',
   errNoGeometry: 'The script did not return any geometry.',
-  errNoImport: 'import is not available here. Use require(\'@jscad/modeling\').',
 }
 
 export const messages = { de, en }
 export type MessageKey = keyof typeof de
 
-const errorKeys = new Set<string>(['errTimeout', 'errWorker', 'errNoMain', 'errNoGeometry', 'errNoImport'])
+const errorKeys = new Set<string>(['errTimeout', 'errWorker', 'errNoMain', 'errNoGeometry'])
 
 export function displayError(error: string, t: (key: MessageKey) => string) {
   return errorKeys.has(error) ? t(error as MessageKey) : error

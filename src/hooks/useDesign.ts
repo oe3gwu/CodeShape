@@ -32,6 +32,7 @@ export function useDesign(code: string) {
   const immediate = useRef(false)
   const timerRef = useRef(0)
   const settledKey = useRef('')
+  const builtCode = useRef(code)
   codeRef.current = code
 
   const debouncedCode = useDebounced(code, 320)
@@ -79,7 +80,8 @@ export function useDesign(code: string) {
     const force = immediate.current
     const source = force ? codeRef.current : debouncedCode
     immediate.current = false
-    if (!force && debouncedKey === settledKey.current) return
+    if (!force && source === builtCode.current && debouncedKey === settledKey.current) return
+    builtCode.current = source
 
     const id = ++requestId.current
     setBuilding(true)
