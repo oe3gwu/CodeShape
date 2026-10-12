@@ -1,7 +1,7 @@
 import { useI18n } from '../i18n'
 import { Icon } from './icons'
 
-type Mode = 'local' | 'files' | 'github'
+type Mode = 'local' | 'files' | 'github' | 'sim'
 
 type Props = {
   mode: Mode
@@ -33,6 +33,13 @@ export function SideRail({ mode, open, onSelect }: Props) {
         onClick={() => onSelect('github')}
       >
         <Icon name="github" size={18} />
+      </button>
+      <button
+        className={open && mode === 'sim' ? 'is-on' : ''}
+        title={t('sim')}
+        onClick={() => onSelect('sim')}
+      >
+        <Icon name="sim" size={18} />
       </button>
     </nav>
   )

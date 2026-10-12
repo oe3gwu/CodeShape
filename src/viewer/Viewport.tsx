@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { useI18n, type MessageKey } from '../i18n'
+import type { SimHit, SimScene } from '../lib/fem/scene'
 import type { DisplayPart, Planes, Projection, RenderMode, SavedView, Theme, ViewName } from '../types'
 import { Engine } from './engine'
 import { Icon } from '../layout/icons'
@@ -35,6 +36,9 @@ type Props = {
   onSelect: (id: string | null) => void
   onRenderMode: (mode: RenderMode) => void
   onProjection: (projection: Projection) => void
+  sim: SimScene | null
+  legend: { min: number; max: number } | null
+  onSimPick: ((hit: SimHit) => void) | null
 }
 
 export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(props, ref) {
@@ -46,8 +50,9 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(prop
     onSelect: props.onSelect,
     onContext: (_x: number, _y: number) => {},
     onViewChange: props.onViewChange,
+    onStress: (_value: number | null, _x: number, _y: number) => {},
   })
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const initialView = useRef(props.initialView)
   const initialProjection = useRef(props.projection)
   const cubeLabels: CubeLabels = {
@@ -59,9 +64,17 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(prop
     nz: t('bottom'),
   }
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const [hover, setHover] = useState<{ value: number; x: number; y: number } | null>(null)
   handlers.current.onSelect = props.onSelect
   handlers.current.onContext = (x, y) => setMenu({ x, y })
   handlers.current.onViewChange = props.onViewChange
+  handlers.current.onStress = (value, x, y) => {
+    setHover((prev) => {
+      if (value == null) return prev === null ? prev : null
+      if (prev && Math.abs(prev.value - value) < 1e-4 && Math.abs(prev.x - x) < 4 && Math.abs(prev.y - y) < 4) return prev
+      return { value, x, y }
+    })
+  }
 
   useImperativeHandle(ref, () => ({
     fit: () => engineRef.current?.fit(),
@@ -78,6 +91,7 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(prop
       onSelect: (id) => handlers.current.onSelect(id),
       onContextMenu: (x, y) => handlers.current.onContext(x, y),
       onViewChange: (view) => handlers.current.onViewChange(view),
+      onStress: (value, x, y) => handlers.current.onStress?.(value, x, y),
     }, initialProjection.current)
     if (initialView.current) engine.restoreView(initialView.current)
     engineRef.current = engine
@@ -94,6 +108,8 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(prop
   useEffect(() => { engineRef.current?.setRenderMode(props.renderMode) }, [props.renderMode, props.parts])
   useEffect(() => { engineRef.current?.setProjection(props.projection) }, [props.projection])
   useEffect(() => { engineRef.current?.setPlanes(props.planes) }, [props.planes])
+  useEffect(() => { engineRef.current?.setSim(props.sim) }, [props.sim, props.parts])
+  useEffect(() => { engineRef.current?.setSimPick(props.onSimPick ? (hit) => props.onSimPick?.(hit) : null) }, [props.onSimPick])
   useEffect(() => { engineRef.current?.setCubeLabels(cubeLabels) }, [t])
 
   useEffect(() => {
@@ -125,6 +141,26 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(prop
       </div>
       {props.building && props.parts.length === 0 ? <div className="cs-busy">{t('building')}</div> : null}
       {props.error ? <div className="cs-banner">{props.error}</div> : null}
+      {props.legend ? (
+        <div className="cs-legend" aria-hidden="true">
+          <div className="cs-legend-bar" />
+          <div className="cs-legend-labels">
+            <span>{formatMPa(props.legend.max, lang)}</span>
+            <span>{formatMPa(props.legend.min, lang)}</span>
+          </div>
+        </div>
+      ) : null}
+      {hover && hostRef.current ? (
+        <div
+          className="cs-stress-tip"
+          style={{
+            left: hover.x - hostRef.current.getBoundingClientRect().left + 14,
+            top: hover.y - hostRef.current.getBoundingClientRect().top + 14,
+          }}
+        >
+          {t('simHover')} {formatMPa(hover.value, lang)}
+        </div>
+      ) : null}
       {menu ? (
         <div
           className="cs-context"
@@ -151,3 +187,8 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(prop
     </div>
   )
 })
+
+function formatMPa(value: number, lang: string) {
+  const locale = lang === 'de' ? 'de-DE' : 'en-US'
+  return `${value.toLocaleString(locale, { maximumFractionDigits: value >= 100 ? 1 : 3 })} MPa`
+}

@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import type { SimHit, SimResultView, SimScene } from '../lib/fem/scene'
 import type { DisplayPart, Planes, Projection, RenderMode, SavedView, Theme, ViewName } from '../types'
 import { featureEdges } from './featureEdges'
 import { CUBE_CAMERA_DISTANCE, createViewCube, regionFromHit, type CubeLabels, type ViewCubeParts } from './viewCube'
@@ -9,6 +10,7 @@ export type EngineHandlers = {
   onSelect: (id: string | null) => void
   onContextMenu: (x: number, y: number) => void
   onViewChange?: (view: SavedView) => void
+  onStress?: (value: number | null, x: number, y: number) => void
 }
 
 type PartObject = {
@@ -58,6 +60,12 @@ export class Engine {
   private viewTimer = 0
   private theme: Theme = 'light'
   private cubeLabels: CubeLabels | undefined
+  private readonly simRoot = new THREE.Group()
+  private simPick: ((hit: SimHit) => void) | null = null
+  private simScene: SimScene | null = null
+  private stressMesh: THREE.Mesh | null = null
+  private faceElement: Uint32Array | null = null
+  private elementVonMises: Float32Array | null = null
 
   constructor(
     private readonly host: HTMLElement,
@@ -137,8 +145,10 @@ export class Engine {
     this.cubeScene.add(this.cube.mesh, this.cube.highlight, this.cube.ring)
     const cubeLight = new THREE.AmbientLight(0xffffff, 1)
     this.cubeScene.add(cubeLight)
+    this.scene.add(this.simRoot)
 
     canvas.addEventListener('pointerdown', this.onPointerDown)
+    canvas.addEventListener('pointermove', this.onPointerMove)
     canvas.addEventListener('pointerup', this.onPointerUp)
     canvas.addEventListener('contextmenu', this.onContextMenu)
     cubeCanvas.addEventListener('pointerdown', this.onCubePointer)
@@ -158,11 +168,13 @@ export class Engine {
     window.removeEventListener('pagehide', this.flushView)
     this.observer.disconnect()
     this.canvas.removeEventListener('pointerdown', this.onPointerDown)
+    this.canvas.removeEventListener('pointermove', this.onPointerMove)
     this.canvas.removeEventListener('pointerup', this.onPointerUp)
     this.canvas.removeEventListener('contextmenu', this.onContextMenu)
     this.cubeCanvas.removeEventListener('pointerdown', this.onCubePointer)
     this.cubeCanvas.removeEventListener('pointermove', this.onCubeHover)
     this.cubeCanvas.removeEventListener('pointerleave', this.onCubeLeave)
+    this.clearSim()
     this.clearParts()
     this.controls.dispose()
     this.renderer.dispose()
@@ -201,6 +213,7 @@ export class Engine {
     this.renderer.toneMappingExposure = theme === 'dark' ? 0.92 : 1.02
     this.rebuildCube()
     this.applySelection()
+    this.applySim()
   }
 
   setCubeLabels(labels: CubeLabels) {
@@ -243,6 +256,15 @@ export class Engine {
     }
     this.projection = projection
     this.controls.update()
+  }
+
+  setSim(scene: SimScene | null) {
+    this.simScene = scene
+    this.applySim()
+  }
+
+  setSimPick(handler: ((hit: SimHit) => void) | null) {
+    this.simPick = handler
   }
 
   setPlanes(planes: Planes) {
@@ -484,6 +506,84 @@ export class Engine {
     return group
   }
 
+  private applySim() {
+    this.clearSim()
+    const scene = this.simScene
+    if (!scene) return
+    const guidePart = scene.guides ? this.partObjects.find((part) => part.id === scene.guides?.partId) : null
+    if (scene.guides && guidePart) {
+      const fixed = paintTriangles(guidePart, scene.guides.fixed, 0xd11414)
+      const slide = paintTriangles(guidePart, scene.guides.slide, 0x2f9d5a)
+      const pressure = paintTriangles(guidePart, scene.guides.pressure, 0xe07a1f)
+      for (const mesh of [fixed, slide, pressure]) if (mesh) this.simRoot.add(mesh)
+      const size = partSpan(guidePart)
+      const largest = scene.guides.arrows.reduce((max, arrow) => Math.max(max, Math.hypot(arrow.vector[0], arrow.vector[1], arrow.vector[2])), 0)
+      for (const arrow of scene.guides.arrows) {
+        const magnitude = Math.hypot(arrow.vector[0], arrow.vector[1], arrow.vector[2])
+        if (!(magnitude > 0)) continue
+        const length = size * (0.12 + 0.16 * (largest > 0 ? magnitude / largest : 1))
+        const direction = new THREE.Vector3(arrow.vector[0] / magnitude, arrow.vector[1] / magnitude, arrow.vector[2] / magnitude)
+        const helper = new THREE.ArrowHelper(direction, new THREE.Vector3(...arrow.origin), length, 0xc4382a, length * 0.22, length * 0.1)
+        this.simRoot.add(helper)
+        const sprite = loadLabel(arrow.label, this.theme)
+        sprite.position.copy(helper.position).addScaledVector(direction, length * 1.05)
+        const labelScale = size * 0.16
+        sprite.scale.set(labelScale * 2.6, labelScale * 0.7, 1)
+        this.simRoot.add(sprite)
+      }
+    }
+    const view = scene.result
+    if (!view) return
+    const position = new Float32Array(view.positions.length)
+    const factor = view.deformed ? view.scale : 0
+    for (let index = 0; index < position.length; index++) position[index] = view.positions[index] + factor * view.displacement[index]
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(position, 3))
+    geometry.setIndex(new THREE.BufferAttribute(view.indices, 1))
+    if (view.colors) geometry.setAttribute('color', new THREE.BufferAttribute(view.colors, 3))
+    geometry.computeVertexNormals()
+    const material = new THREE.MeshStandardMaterial({
+      color: view.colors ? 0xffffff : new THREE.Color().setRGB(view.baseColor[0], view.baseColor[1], view.baseColor[2], THREE.SRGBColorSpace),
+      vertexColors: Boolean(view.colors),
+      roughness: 0.48,
+      metalness: 0.08,
+      transparent: view.opacity < 0.999,
+      opacity: view.opacity,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
+    })
+    const mesh = new THREE.Mesh(geometry, material)
+    const edges = new THREE.LineSegments(featureEdges(geometry, 28), new THREE.LineBasicMaterial({ color: this.edgeColor, transparent: true, opacity: 0.45 }))
+    this.simRoot.add(mesh, edges)
+    this.stressMesh = mesh
+    this.faceElement = view.faceElement
+    this.elementVonMises = view.elementVonMises
+    if (view.colors) {
+      const span = view.maxVonMises - view.minVonMises
+      if (span > 1e-6) this.simRoot.add(hotEdges(view, position, view.minVonMises + span * 0.8))
+    }
+    for (const part of this.partObjects) {
+      if (part.id !== view.partId) continue
+      if (part.mesh) part.mesh.visible = false
+      part.lines.visible = false
+    }
+  }
+
+  private clearSim() {
+    this.stressMesh = null
+    this.faceElement = null
+    this.elementVonMises = null
+    for (const child of [...this.simRoot.children]) {
+      child.removeFromParent()
+      disposeTree(child)
+    }
+    for (const part of this.partObjects) {
+      if (part.mesh) part.mesh.visible = true
+      part.lines.visible = true
+    }
+  }
+
   private makeOrigin() {
     return new THREE.AxesHelper(1)
   }
@@ -509,6 +609,14 @@ export class Engine {
     this.raycaster.setFromCamera(new THREE.Vector2(x, y), this.active)
     const meshes = this.partObjects.flatMap((part) => (part.mesh && part.group.visible ? [part.mesh] : []))
     const hit = this.raycaster.intersectObjects(meshes, false)[0]
+    if (this.simPick) {
+      if (!hit || hit.faceIndex == null) return
+      const sampled = faceHit(hit)
+      if (!sampled) return
+      this.simPick(sampled)
+      return
+    }
+    if (!hit && this.stressMesh && this.raycaster.intersectObject(this.stressMesh, false).length > 0) return
     const id = hit ? String(hit.object.userData.partId) : null
     this.handlers.onSelect(id)
   }
@@ -522,6 +630,26 @@ export class Engine {
     if (distance > 4 || this.pointer.button !== event.button) return
     if (event.button === 0) this.pick(event)
     if (event.button === 2) this.handlers.onContextMenu(event.clientX, event.clientY)
+  }
+
+  private readonly onPointerMove = (event: PointerEvent) => {
+    const report = this.handlers.onStress
+    if (!report) return
+    if (!this.stressMesh || !this.faceElement || !this.elementVonMises) {
+      report(null, event.clientX, event.clientY)
+      return
+    }
+    const rect = this.canvas.getBoundingClientRect()
+    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+    this.raycaster.setFromCamera(new THREE.Vector2(x, y), this.active)
+    const hit = this.raycaster.intersectObject(this.stressMesh, false)[0]
+    if (!hit || hit.faceIndex == null) {
+      report(null, event.clientX, event.clientY)
+      return
+    }
+    const value = this.elementVonMises[this.faceElement[hit.faceIndex]]
+    report(Number.isFinite(value) ? value : null, event.clientX, event.clientY)
   }
 
   private readonly onContextMenu = (event: Event) => {
@@ -594,5 +722,136 @@ export class Engine {
     ;(highlight.material as THREE.Material).dispose()
     ring.geometry.dispose()
     ;(ring.material as THREE.Material).dispose()
+  }
+}
+
+function paintTriangles(part: PartObject, triangles: number[], color: number) {
+  if (!part.mesh || triangles.length === 0) return null
+  const index = part.mesh.geometry.getIndex()
+  const position = part.mesh.geometry.getAttribute('position')
+  if (!index) return null
+  const ids = index.array
+  const coords = position.array
+  const points: number[] = []
+  for (const triangle of triangles) {
+    const start = triangle * 3
+    if (start + 2 >= ids.length) continue
+    for (let corner = 0; corner < 3; corner++) {
+      const vertex = ids[start + corner]
+      points.push(coords[vertex * 3], coords[vertex * 3 + 1], coords[vertex * 3 + 2])
+    }
+  }
+  if (points.length === 0) return null
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3))
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.42,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  })
+  const mesh = new THREE.Mesh(geometry, material)
+  mesh.renderOrder = 3
+  return mesh
+}
+
+function partSpan(part: PartObject) {
+  if (!part.mesh) return 40
+  const box = new THREE.Box3().setFromObject(part.mesh)
+  return Math.max(box.getSize(new THREE.Vector3()).length(), 1)
+}
+
+function loadLabel(text: string, theme: Theme) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 64
+  const context = canvas.getContext('2d')
+  if (!context) return new THREE.Sprite()
+  context.fillStyle = theme === 'dark' ? 'rgba(20,23,28,0.92)' : 'rgba(255,255,255,0.94)'
+  context.fillRect(0, 0, 256, 64)
+  context.fillStyle = theme === 'dark' ? '#f2f4f8' : '#1c2128'
+  context.font = '28px sans-serif'
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.fillText(text, 128, 34)
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false })
+  const sprite = new THREE.Sprite(material)
+  sprite.renderOrder = 5
+  return sprite
+}
+
+function hotEdges(view: SimResultView, position: Float32Array, limit: number) {
+  const points: number[] = []
+  for (let triangle = 0; triangle < view.faceElement.length; triangle++) {
+    if (view.elementVonMises[view.faceElement[triangle]] < limit) continue
+    const ids = [view.indices[triangle * 3], view.indices[triangle * 3 + 1], view.indices[triangle * 3 + 2]]
+    for (const [from, to] of [[ids[0], ids[1]], [ids[1], ids[2]], [ids[2], ids[0]]] as const) {
+      points.push(position[from * 3], position[from * 3 + 1], position[from * 3 + 2], position[to * 3], position[to * 3 + 1], position[to * 3 + 2])
+    }
+  }
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3))
+  const lines = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: 0x8d1010 }))
+  lines.renderOrder = 4
+  return lines
+}
+
+function disposeTree(object: THREE.Object3D) {
+  object.traverse((child) => {
+    const meshed = child as THREE.Mesh
+    meshed.geometry?.dispose()
+    const material = meshed.material as THREE.Material | THREE.Material[] | undefined
+    const list = Array.isArray(material) ? material : material ? [material] : []
+    for (const entry of list) {
+      const mapped = entry as THREE.MeshBasicMaterial
+      mapped.map?.dispose()
+      entry.dispose()
+    }
+  })
+}
+
+function faceHit(hit: THREE.Intersection): SimHit | null {
+  const mesh = hit.object as THREE.Mesh
+  const index = mesh.geometry.getIndex()
+  const position = mesh.geometry.getAttribute('position')
+  if (!index || hit.faceIndex == null) return null
+  const a = index.getX(hit.faceIndex * 3)
+  const b = index.getX(hit.faceIndex * 3 + 1)
+  const c = index.getX(hit.faceIndex * 3 + 2)
+  const ax = position.getX(a)
+  const ay = position.getY(a)
+  const az = position.getZ(a)
+  const bx = position.getX(b)
+  const by = position.getY(b)
+  const bz = position.getZ(b)
+  const cx = position.getX(c)
+  const cy = position.getY(c)
+  const cz = position.getZ(c)
+  const abx = bx - ax
+  const aby = by - ay
+  const abz = bz - az
+  const acx = cx - ax
+  const acy = cy - ay
+  const acz = cz - az
+  let nx = aby * acz - abz * acy
+  let ny = abz * acx - abx * acz
+  let nz = abx * acy - aby * acx
+  const length = Math.hypot(nx, ny, nz)
+  if (!(length > 0)) return null
+  nx /= length
+  ny /= length
+  nz /= length
+  const point = hit.point
+  return {
+    partId: String(mesh.userData.partId),
+    triangle: hit.faceIndex,
+    point: [point.x, point.y, point.z],
+    normal: [nx, ny, nz],
   }
 }

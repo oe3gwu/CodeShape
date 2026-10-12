@@ -29,6 +29,7 @@ type IconName =
   | 'camera'
   | 'chat'
   | 'settings'
+  | 'sim'
 
 const paths: Record<IconName, ReactNode> = {
   file: <path d="M4 2.5h5l3 3V13.5H4zM9 2.5V6h3" />,
@@ -59,6 +60,7 @@ const paths: Record<IconName, ReactNode> = {
   camera: <><path d="M2.5 5.5h2l1.2-1.5h4.6L11.5 5.5h2v7h-11z" /><circle cx="8" cy="9" r="1.8" /></>,
   chat: <path d="M2.8 3.2h10.4v7.2H6.4L3.2 13V3.2z" />,
   settings: <><circle cx="8" cy="8" r="2.1" /><path d="M8 2.1v1.5M8 12.4v1.5M2.1 8h1.5M12.4 8h1.5M3.8 3.8l1.1 1.1M11.1 11.1l1.1 1.1M12.2 3.8l-1.1 1.1M4.9 11.1l-1.1 1.1" /></>,
+  sim: <><path d="M2.4 12.6h11.2" /><path d="M4 12.6V8.2M8 12.6V5.2M12 12.6V3.2" /><path d="M10.6 2.6h2.4v2.2h-2.4z" /></>,
 }
 
 export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {

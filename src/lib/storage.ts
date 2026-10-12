@@ -20,7 +20,7 @@ export type Persisted = {
   projection?: Projection
   planes?: Planes
   view?: SavedView
-  sideMode?: 'local' | 'files' | 'github'
+  sideMode?: 'local' | 'files' | 'github' | 'sim'
   githubUrl?: string
   filesPath?: string
   sourcePath?: string
@@ -37,7 +37,7 @@ export function loadPersisted(): Persisted {
     if (!data || typeof data !== 'object') return {}
     data.planes = readPlanes(data.planes)
     data.view = readView(data.view)
-    if (data.sideMode !== 'local' && data.sideMode !== 'files' && data.sideMode !== 'github') delete data.sideMode
+    if (data.sideMode !== 'local' && data.sideMode !== 'files' && data.sideMode !== 'github' && data.sideMode !== 'sim') delete data.sideMode
     if (typeof data.githubUrl !== 'string') delete data.githubUrl
     if (!isSafeRel(data.filesPath)) delete data.filesPath
     if (!isSafeRel(data.sourcePath)) delete data.sourcePath

@@ -636,3 +636,63 @@ body.is-resizing-row, body.is-resizing-row * { cursor: row-resize !important; }
   .cs-brand-text span, .cs-workspace-name, .cs-topsearch { display: none; }
   .cs-docname { width: 90px; }
 }
+
+.cs-sim { overflow: auto; padding: 8px 10px 14px; gap: 8px; }
+.cs-sim h2 { margin: 0; font-size: 13px; }
+.cs-sim-note { margin: 0; color: var(--cs-dim); font-size: 11px; line-height: 1.35; }
+.cs-sim-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.cs-sim-tools button, .cs-sim-actions button {
+  min-height: 26px;
+  border: 1px solid var(--cs-border-strong);
+  border-radius: 2px;
+  background: var(--cs-input);
+  padding: 2px 6px;
+}
+.cs-sim-tools button.is-on, .cs-sim-actions button.is-primary {
+  background: var(--cs-active);
+  color: var(--cs-active-text);
+  border-color: transparent;
+}
+.cs-sim-actions { display: flex; flex-direction: column; gap: 4px; }
+.cs-sim-loads { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cs-sim-load-head { display: flex; align-items: center; justify-content: space-between; font-weight: 650; }
+.cs-sim-check { display: flex; align-items: center; gap: 6px; }
+.cs-sim-error { margin: 0; color: var(--cs-danger); font-size: 12px; }
+.cs-sim-results { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.cs-sim-results div { display: flex; justify-content: space-between; gap: 8px; }
+.cs-sim-results dt { color: var(--cs-dim); }
+.cs-sim-results dd { margin: 0; font-variant-numeric: tabular-nums; }
+.cs-sim-results dd.is-hot { color: var(--cs-danger); font-weight: 700; }
+.cs-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 2;
+}
+.cs-legend-bar {
+  width: 12px;
+  height: 140px;
+  border: 1px solid var(--cs-border-strong);
+  background: linear-gradient(to top, #0d2a73 0%, #66b3f2 20%, #2eb857 45%, #f2d628 65%, #f27a1a 82%, #d11414 100%);
+}
+.cs-legend-labels {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--cs-text);
+}
+.cs-stress-tip {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  padding: 3px 6px;
+  border-radius: 3px;
+  background: var(--cs-panel);
+  border: 1px solid var(--cs-border-strong);
+  font-size: 12px;
+  white-space: nowrap;
+}

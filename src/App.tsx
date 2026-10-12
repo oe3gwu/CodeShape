@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useDesign } from './hooks/useDesign'
+import { useSimulation } from './hooks/useSimulation'
 import { EditorWindow } from './layout/EditorWindow'
 import { FeaturePanel } from './layout/FeaturePanel'
 import { FileBrowser } from './layout/FileBrowser'
@@ -8,6 +9,7 @@ import { InferenceSettings } from './layout/InferenceSettings'
 import { InferenceWindow } from './layout/InferenceWindow'
 import { ParameterDialog } from './layout/ParameterDialog'
 import { SideRail } from './layout/SideRail'
+import { SimulationPanel } from './layout/SimulationPanel'
 import { TopBar } from './layout/TopBar'
 import { displayError, useI18n, type MessageKey } from './i18n'
 import { downloadBlob, meshesToObj, meshesToStl } from './lib/export'
@@ -53,7 +55,7 @@ export function App() {
   const [docName, setDocName] = useState(saved.docName || SAMPLE_NAME)
   const [editorOpen, setEditorOpen] = useState(saved.editorOpen !== false)
   const [treeOpen, setTreeOpen] = useState(saved.treeOpen !== false)
-  const [sideMode, setSideMode] = useState<'local' | 'files' | 'github'>(saved.sideMode === 'github' || saved.sideMode === 'files' ? saved.sideMode : 'local')
+  const [sideMode, setSideMode] = useState<'local' | 'files' | 'github' | 'sim'>(saved.sideMode === 'github' || saved.sideMode === 'files' || saved.sideMode === 'sim' ? saved.sideMode : 'local')
   const [githubUrl, setGithubUrl] = useState(saved.githubUrl ?? '')
   const [filesPath, setFilesPath] = useState(saved.filesPath ?? '')
   const [sourcePath, setSourcePath] = useState(saved.sourcePath ?? '')
@@ -92,6 +94,7 @@ export function App() {
   proposalRef.current = proposal
   sourcePathRef.current = sourcePath
   const design = useDesign(modelCode)
+  const simulation = useSimulation(design.parts)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -337,7 +340,7 @@ export function App() {
     savePersisted({ view: next })
   }
 
-  const selectSide = (next: 'local' | 'files' | 'github') => {
+  const selectSide = (next: 'local' | 'files' | 'github' | 'sim') => {
     if (treeOpen && sideMode === next) setTreeOpen(false)
     else {
       setSideMode(next)
@@ -408,6 +411,40 @@ export function App() {
               <GithubBrowser url={githubUrl} onUrl={setGithubUrl} onOpen={openGithubModel} />
             ) : sideMode === 'files' ? (
               <FileBrowser path={filesPath} activePath={sourcePath} onPath={setFilesPath} onOpen={openLocalFile} />
+            ) : sideMode === 'sim' ? (
+              <SimulationPanel
+                meshes={simulation.meshes}
+                partId={simulation.partId}
+                material={simulation.material}
+                tool={simulation.tool}
+                conditions={simulation.conditions}
+                gravity={simulation.gravity}
+                edge={simulation.edge}
+                showStress={simulation.showStress}
+                showDeformed={simulation.showDeformed}
+                scale={simulation.scale}
+                opacity={simulation.opacity}
+                stage={simulation.stage}
+                error={simulation.error}
+                minVonMises={simulation.result?.minVonMises ?? null}
+                maxVonMises={simulation.result?.maxVonMises ?? null}
+                safetyFactor={simulation.result?.safetyFactor ?? null}
+                hasResult={simulation.result !== null}
+                onPart={simulation.choosePart}
+                onPreset={simulation.choosePreset}
+                onMaterial={simulation.editMaterial}
+                onTool={simulation.setTool}
+                onGravity={simulation.setGravity}
+                onEdge={simulation.setEdge}
+                onStress={simulation.setShowStress}
+                onDeformed={simulation.setShowDeformed}
+                onScale={simulation.setScale}
+                onOpacity={simulation.setOpacity}
+                onEdit={simulation.editCondition}
+                onRemove={simulation.removeCondition}
+                onStart={simulation.start}
+                onReset={simulation.reset}
+              />
             ) : (
               <FeaturePanel
                 docName={docName}
@@ -443,6 +480,9 @@ export function App() {
               onSelect={setSelectedId}
               onRenderMode={setRenderMode}
               onProjection={setProjection}
+              sim={simulation.scene}
+              legend={simulation.legend}
+              onSimPick={simulation.tool === 'none' ? null : simulation.pick}
             />
             <ParameterDialog definitions={design.definitions} values={design.params} onChange={design.setParam} />
           </div>
