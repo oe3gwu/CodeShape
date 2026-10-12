@@ -18,16 +18,15 @@ CodeShape ist ein lokaler Entwicklungsclient für parametrische Modelle in JSCAD
 
 ## Start
 
-Node.js 20 oder neuer.
+Node.js 20 oder neuer. Die Installation legt einen systemd-Dienst im Benutzerkontext an, nicht als Systemdienst und nicht als root:
 
 ```bash
-npm install
-npm run dev
+./installer/install.sh
 ```
 
-Der Dev-Server bindet `127.0.0.1:5173`. Öffnen: [http://127.0.0.1:5173/](http://127.0.0.1:5173/)
+Der Dienst bindet `127.0.0.1:5173`. Öffnen: [http://127.0.0.1:5173/](http://127.0.0.1:5173/)
 
-Dieselbe Startfolge steht als Agent-Prompt in [`installer/PROMPT.md`](installer/PROMPT.md).
+Status, Protokoll und Stoppen laufen über `systemctl --user` und `journalctl --user -u codeshape.service`. Dieselbe Folge steht als Agent-Prompt in [`installer/PROMPT.md`](installer/PROMPT.md).
 
 Im Editor übernimmt **Shift+Enter** den aktuellen Code und baut das Modell neu. Die Sprache schaltet der Button **DE** / **EN** direkt links neben dem Hell/Dunkel-Schalter. Das Fenster „Inferenz“ ist absichtlich leer.
 

@@ -1,0 +1,16 @@
+[Unit]
+Description=CodeShape-Entwicklungsclient
+Documentation=https://github.com/oe3gwu/CodeShape
+After=default.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=@ROOT@
+ExecStart="@NODE@" "@VITE@" --host 127.0.0.1 --port 5173
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
