@@ -3,7 +3,7 @@ import { useI18n, type MessageKey } from '../i18n'
 import type { Projection, RenderMode, Theme } from '../types'
 import { Icon } from './icons'
 
-type MenuId = 'datei' | 'ansicht' | 'hilfe'
+type MenuId = 'datei' | 'ansicht' | 'optionen' | 'hilfe'
 
 type Props = {
   docName: string
@@ -32,6 +32,7 @@ type Props = {
   onTheme: () => void
   onToggleLang: () => void
   onHelp: () => void
+  onConfigureInference: () => void
 }
 
 const modeKey: Record<RenderMode, MessageKey> = {
@@ -100,6 +101,14 @@ export function TopBar(props: Props) {
               <hr />
               <button onClick={() => run(props.onTheme)}>{props.theme === 'dark' ? t('lightTheme') : t('darkTheme')}</button>
               <button onClick={() => run(props.onToggleLang)}>{t('language')}: {lang === 'de' ? 'Deutsch' : 'English'}</button>
+            </div>
+          ) : null}
+        </div>
+        <div className="cs-menu-item">
+          <button className={menu === 'optionen' ? 'is-open' : ''} onClick={() => setMenu(menu === 'optionen' ? null : 'optionen')}>{t('options')}</button>
+          {menu === 'optionen' ? (
+            <div className="cs-dropdown">
+              <button onClick={() => run(props.onConfigureInference)}>{t('inference')}</button>
             </div>
           ) : null}
         </div>

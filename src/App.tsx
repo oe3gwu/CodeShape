@@ -4,6 +4,7 @@ import { EditorWindow } from './layout/EditorWindow'
 import { FeaturePanel } from './layout/FeaturePanel'
 import { FileBrowser } from './layout/FileBrowser'
 import { GithubBrowser } from './layout/GithubBrowser'
+import { InferenceSettings } from './layout/InferenceSettings'
 import { InferenceWindow } from './layout/InferenceWindow'
 import { ParameterDialog } from './layout/ParameterDialog'
 import { SideRail } from './layout/SideRail'
@@ -13,6 +14,8 @@ import { downloadBlob, meshesToObj, meshesToStl } from './lib/export'
 import { displayPath, expandLocalIncludes, writeFileText } from './lib/files'
 import { IncludeMissingError } from './lib/github'
 import { loadPersisted, savePersisted } from './lib/storage'
+import { emptyInference, sameScript, type InferenceConfig } from './lib/inference'
+import { normalizeScript } from './lib/scriptDiff'
 import { SAMPLE, SAMPLE_NAME } from './sample'
 import type { PlaneKey, Planes, Projection, RenderMode, SavedView, Theme } from './types'
 import { Viewport, type ViewportHandle } from './viewer/Viewport'
@@ -43,7 +46,9 @@ export function App() {
   const { lang, t, toggle } = useI18n()
   const saved = useRef(loadPersisted()).current
   const [theme, setTheme] = useState<Theme>(saved.theme === 'dark' ? 'dark' : 'light')
-  const [code, setCode] = useState(saved.code || SAMPLE)
+  const [accepted, setAccepted] = useState(saved.code || SAMPLE)
+  const [proposal, setProposal] = useState<string | null>(null)
+  const code = proposal ?? accepted
   const [modelCode, setModelCode] = useState(saved.code || SAMPLE)
   const [docName, setDocName] = useState(saved.docName || SAMPLE_NAME)
   const [editorOpen, setEditorOpen] = useState(saved.editorOpen !== false)
@@ -69,6 +74,8 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [help, setHelp] = useState(false)
+  const [inference, setInference] = useState<InferenceConfig>(saved.inference ?? emptyInference)
+  const [inferenceOpen, setInferenceOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const viewportRef = useRef<ViewportHandle>(null)
   const workspaceRef = useRef<HTMLDivElement>(null)
@@ -76,9 +83,13 @@ export function App() {
   const dragging = useRef<'tree' | 'editor' | 'chat' | null>(null)
   const layoutRef = useRef({ tree: treeWidth, editor: editorWidth, chat: chatHeight })
   const codeRef = useRef(code)
+  const acceptedRef = useRef(accepted)
+  const proposalRef = useRef(proposal)
   const sourcePathRef = useRef(sourcePath)
   const expandGen = useRef(0)
   codeRef.current = code
+  acceptedRef.current = accepted
+  proposalRef.current = proposal
   sourcePathRef.current = sourcePath
   const design = useDesign(modelCode)
 
@@ -89,8 +100,8 @@ export function App() {
   }, [theme, docName, lang])
 
   useEffect(() => {
-    savePersisted({ code, theme, lang, docName, editorOpen, treeOpen, sideMode, githubUrl, filesPath, sourcePath, treeRatio, editorRatio, chatRatio, chatOpen, renderMode, projection, planes, ...(view ? { view } : {}) })
-  }, [code, theme, lang, docName, editorOpen, treeOpen, sideMode, githubUrl, filesPath, sourcePath, treeRatio, editorRatio, chatRatio, chatOpen, renderMode, projection, planes, view])
+    savePersisted({ code: accepted, theme, lang, docName, editorOpen, treeOpen, sideMode, githubUrl, filesPath, sourcePath, treeRatio, editorRatio, chatRatio, chatOpen, renderMode, projection, planes, ...(view ? { view } : {}) })
+  }, [accepted, theme, lang, docName, editorOpen, treeOpen, sideMode, githubUrl, filesPath, sourcePath, treeRatio, editorRatio, chatRatio, chatOpen, renderMode, projection, planes, view])
 
   useEffect(() => {
     const workspace = workspaceRef.current
@@ -141,8 +152,47 @@ export function App() {
     return () => window.clearTimeout(timer)
   }, [code, sourcePath, t])
 
+  const commitScript = (next: string) => {
+    acceptedRef.current = next
+    codeRef.current = next
+    proposalRef.current = null
+    setAccepted(next)
+    setProposal(null)
+  }
+
+  const proposeScript = (next: string) => {
+    const clean = next.replace(/\r\n/g, '\n')
+    if (sameScript(clean, acceptedRef.current)) {
+      if (proposalRef.current !== null) {
+        proposalRef.current = null
+        codeRef.current = acceptedRef.current
+        setProposal(null)
+      }
+      return
+    }
+    const shown = acceptedRef.current.endsWith('\n') && !clean.endsWith('\n') ? `${clean}\n` : clean
+    if (proposalRef.current !== null && sameScript(proposalRef.current, shown)) return
+    proposalRef.current = shown
+    codeRef.current = shown
+    setProposal(shown)
+    setEditorOpen(true)
+  }
+
+  const acceptProposal = () => {
+    const current = proposalRef.current
+    if (current === null) return
+    commitScript(current)
+  }
+
+  const rejectProposal = () => {
+    if (proposalRef.current === null) return
+    proposalRef.current = null
+    codeRef.current = acceptedRef.current
+    setProposal(null)
+  }
+
   const save = () => {
-    const text = codeRef.current
+    const text = acceptedRef.current
     const target = sourcePathRef.current
     if (target) {
       void writeFileText(target, text).then(
@@ -163,9 +213,8 @@ export function App() {
   }
 
   const onNew = () => {
-    codeRef.current = SAMPLE
     sourcePathRef.current = ''
-    setCode(SAMPLE)
+    commitScript(SAMPLE)
     setSourcePath('')
     setDocName(SAMPLE_NAME)
     setIncludeError(null)
@@ -297,9 +346,8 @@ export function App() {
   }
 
   const openGithubModel = (nextCode: string, nextName: string) => {
-    codeRef.current = nextCode
     sourcePathRef.current = ''
-    setCode(nextCode)
+    commitScript(nextCode)
     setSourcePath('')
     setDocName(nextName)
     setIncludeError(null)
@@ -309,9 +357,8 @@ export function App() {
   }
 
   const openLocalFile = (nextCode: string, nextName: string, path: string) => {
-    codeRef.current = nextCode
     sourcePathRef.current = path
-    setCode(nextCode)
+    commitScript(nextCode)
     setSourcePath(path)
     setDocName(nextName)
     setIncludeError(null)
@@ -351,6 +398,7 @@ export function App() {
         onTheme={() => setTheme((value) => (value === 'dark' ? 'light' : 'dark'))}
         onToggleLang={toggle}
         onHelp={() => setHelp(true)}
+        onConfigureInference={() => setInferenceOpen(true)}
       />
       <div className="cs-workspace" ref={workspaceRef}>
         <SideRail mode={sideMode} open={treeOpen} onSelect={selectSide} />
@@ -401,7 +449,14 @@ export function App() {
           {chatOpen ? <div className="cs-resizer-row" onPointerDown={(event) => startResize('chat', event)} /> : null}
           {chatOpen ? (
             <div className="cs-inference-dock" style={{ height: chatHeight }}>
-              <InferenceWindow onClose={() => setChatOpen(false)} />
+              <InferenceWindow
+                config={inference}
+                script={code}
+                docName={docName}
+                onPropose={proposeScript}
+                onClose={() => setChatOpen(false)}
+                onConfigure={() => setInferenceOpen(true)}
+              />
             </div>
           ) : null}
         </div>
@@ -410,15 +465,21 @@ export function App() {
           <div className="cs-editor-dock" style={{ width: editorWidth }}>
             <EditorWindow
               code={code}
+              base={proposal === null ? null : accepted}
               theme={theme}
               docName={docName}
               building={design.building}
               onChange={(next) => {
+                if (proposalRef.current !== null) return
+                if (normalizeScript(next) === normalizeScript(acceptedRef.current) && next === acceptedRef.current) return
+                acceptedRef.current = next
                 codeRef.current = next
-                setCode(next)
+                setAccepted(next)
               }}
               onRebuild={rebuildModel}
               onSave={save}
+              onAccept={acceptProposal}
+              onReject={rejectProposal}
               onClose={() => setEditorOpen(false)}
             />
           </div>
@@ -438,6 +499,18 @@ export function App() {
           <span>{projection === 'ortho' ? t('ortho') : t('perspective')}</span>
         </div>
       </footer>
+      {inferenceOpen ? (
+        <InferenceSettings
+          config={inference}
+          onClose={() => setInferenceOpen(false)}
+          onSave={(next) => {
+            setInference(next)
+            savePersisted({ inference: next })
+            setInferenceOpen(false)
+            setChatOpen(true)
+          }}
+        />
+      ) : null}
       {help ? (
         <div className="cs-modal-back" onPointerDown={() => setHelp(false)}>
           <div className="cs-modal" onPointerDown={(event) => event.stopPropagation()}>
@@ -468,9 +541,8 @@ export function App() {
           event.target.value = ''
           if (!file) return
           file.text().then((text) => {
-            codeRef.current = text
             sourcePathRef.current = ''
-            setCode(text)
+            commitScript(text)
             setSourcePath('')
             setIncludeError(null)
             setSaveError(null)

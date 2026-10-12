@@ -23,6 +23,8 @@
   --cs-view-bottom: #f7f8fa;
   --cs-input: #ffffff;
   --cs-kbd: #eef1f5;
+  --cs-proposal-add: #d9f2e3;
+  --cs-proposal-del: #f8d6d6;
   --cs-radius: 4px;
 }
 
@@ -50,6 +52,8 @@ html[data-theme="dark"] {
   --cs-view-bottom: #2b313a;
   --cs-input: #14171c;
   --cs-kbd: #2a2f38;
+  --cs-proposal-add: #1d3b2a;
+  --cs-proposal-del: #4a2428;
 }
 
 * { box-sizing: border-box; }
@@ -513,6 +517,8 @@ body.is-resizing-row, body.is-resizing-row * { cursor: row-resize !important; }
   box-shadow: var(--cs-shadow);
 }
 .cs-window-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+.cs-window-actions { margin-left: auto; display: flex; align-items: center; }
+.cs-window-actions .cs-window-close { margin-left: 0; }
 .cs-window-close { margin-left: auto; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 3px; }
 .cs-window-close:hover { background: var(--cs-hover); }
 .cs-live { width: 8px; height: 8px; border-radius: 50%; background: #2f9d5a; flex: none; }
@@ -521,6 +527,19 @@ body.is-resizing-row, body.is-resizing-row * { cursor: row-resize !important; }
 .cs-editor .cm-editor { height: 100%; background: var(--cs-input); }
 .cs-editor .cm-scroller { overflow: auto; }
 .cs-editor .cm-gutters { background: var(--cs-title); color: var(--cs-faint); border-right: 1px solid var(--cs-border); }
+.cs-editor .cm-proposal-add { background: var(--cs-proposal-add); }
+.cs-editor .cm-proposal-del {
+  white-space: pre;
+  text-decoration: line-through;
+  color: var(--cs-dim);
+  background: var(--cs-proposal-del);
+  padding-left: 6px;
+}
+.cs-proposal-actions { margin-left: auto; display: flex; align-items: center; gap: 4px; flex: none; }
+.cs-window-title:has(.cs-proposal-actions) .cs-window-close { margin-left: 0; }
+.cs-proposal-actions button { height: 22px; padding: 0 8px; border-radius: 3px; font-weight: 650; }
+.cs-proposal-accept { background: var(--cs-accent); color: white; }
+.cs-proposal-reject { border: 1px solid var(--cs-border-strong); }
 
 .cs-inference-dock {
   flex: none;
@@ -529,7 +548,41 @@ body.is-resizing-row, body.is-resizing-row * { cursor: row-resize !important; }
   display: flex;
 }
 .cs-inference { flex: 1; min-width: 0; min-height: 0; }
-.cs-inference-body { flex: 1; min-height: 0; background: var(--cs-panel); }
+.cs-inference-body { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--cs-panel); }
+.cs-chat-log { flex: 1; min-height: 0; overflow: auto; padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; }
+.cs-chat-msg { max-width: 88%; padding: 6px 8px; border-radius: 6px; white-space: pre-wrap; user-select: text; line-height: 1.4; }
+.cs-chat-msg.is-user { align-self: flex-end; background: var(--cs-active); color: var(--cs-active-text); }
+.cs-chat-msg.is-assistant { align-self: flex-start; background: var(--cs-hover); }
+.cs-chat-form { display: flex; gap: 6px; align-items: flex-end; padding: 8px; border-top: 1px solid var(--cs-border); }
+.cs-chat-form textarea {
+  flex: 1;
+  min-height: 38px;
+  max-height: 96px;
+  resize: none;
+  border: 1px solid var(--cs-border-strong);
+  border-radius: 4px;
+  background: var(--cs-input);
+  color: var(--cs-text);
+  padding: 6px 8px;
+}
+.cs-chat-form textarea:focus { outline: none; border-color: var(--cs-accent); }
+.cs-chat-form button { height: 32px; padding: 0 12px; border-radius: 4px; background: var(--cs-accent); color: white; font-weight: 650; }
+.cs-chat-form button:disabled { opacity: 0.45; }
+.cs-empty button { display: block; margin-top: 8px; color: var(--cs-accent); }
+.cs-inference-settings { width: 440px; }
+.cs-form { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+.cs-form .cs-param input[type="password"], .cs-form .cs-param input[type="url"] {
+  width: 100%;
+  height: 28px;
+  border: 1px solid var(--cs-border-strong);
+  background: var(--cs-input);
+  border-radius: 2px;
+  padding: 0 6px;
+}
+.cs-form-row { display: flex; justify-content: flex-end; gap: 8px; }
+.cs-form-row button { height: 28px; padding: 0 12px; border-radius: 3px; background: var(--cs-hover); }
+.cs-form-row button.cs-text-primary { background: var(--cs-accent); color: white; font-weight: 650; }
+.cs-form-error { color: var(--cs-danger); }
 
 .cs-status {
   height: 26px;

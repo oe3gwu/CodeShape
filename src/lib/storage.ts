@@ -1,4 +1,5 @@
 import type { Lang } from '../i18n'
+import { isInferenceProvider, type InferenceConfig } from './inference'
 import type { Planes, Projection, RenderMode, SavedView, Theme } from '../types'
 
 export type Persisted = {
@@ -23,6 +24,7 @@ export type Persisted = {
   githubUrl?: string
   filesPath?: string
   sourcePath?: string
+  inference?: InferenceConfig
 }
 
 const KEY = 'codeshape.v1'
@@ -42,6 +44,7 @@ export function loadPersisted(): Persisted {
     if (!isLayoutRatio(data.treeRatio)) delete data.treeRatio
     if (!isLayoutRatio(data.editorRatio)) delete data.editorRatio
     if (!isLayoutRatio(data.chatRatio)) delete data.chatRatio
+    data.inference = readInference(data.inference)
     return data
   } catch {
     return {}
@@ -51,6 +54,21 @@ export function loadPersisted(): Persisted {
 export function savePersisted(data: Partial<Persisted>) {
   const prev = loadPersisted()
   localStorage.setItem(KEY, JSON.stringify({ ...prev, ...data }))
+}
+
+function readInference(value: unknown): InferenceConfig | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const record = value as Record<string, unknown>
+  if (!isInferenceProvider(record.provider)) return undefined
+  if (typeof record.baseUrl !== 'string' || record.baseUrl.length > 500) return undefined
+  if (typeof record.apiKey !== 'string' || record.apiKey.length > 500) return undefined
+  if (typeof record.model !== 'string' || record.model.length > 200) return undefined
+  return {
+    provider: record.provider,
+    baseUrl: record.baseUrl,
+    apiKey: record.apiKey,
+    model: record.model,
+  }
 }
 
 function isLayoutRatio(value: unknown): value is number {
