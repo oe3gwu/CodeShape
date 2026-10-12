@@ -59,8 +59,6 @@ export function App() {
     document.documentElement.dataset.theme = theme
     document.documentElement.lang = lang
     document.title = `${docName} — CodeShape`
-    const icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
-    if (icon) icon.href = theme === 'dark' ? '/branding/scch-weiss-icon.png' : '/branding/scch-schwarz-icon.png'
   }, [theme, docName, lang])
 
   useEffect(() => {
