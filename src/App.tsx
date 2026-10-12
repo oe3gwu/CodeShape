@@ -453,6 +453,10 @@ export function App() {
                 config={inference}
                 script={code}
                 docName={docName}
+                buildError={includeError ?? (design.error ? displayError(design.error, t) : null)}
+                building={design.building}
+                buildRevision={design.revision}
+                proposalActive={proposal !== null}
                 onPropose={proposeScript}
                 onClose={() => setChatOpen(false)}
                 onConfigure={() => setInferenceOpen(true)}

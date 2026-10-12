@@ -23,6 +23,7 @@ export function useDesign(code: string) {
   const [parts, setParts] = useState<DisplayPart[]>([])
   const [error, setError] = useState<string | null>(null)
   const [building, setBuilding] = useState(false)
+  const [revision, setRevision] = useState(0)
   const [elapsed, setElapsed] = useState(0)
   const [triangles, setTriangles] = useState(0)
   const [nonce, setNonce] = useState(0)
@@ -47,6 +48,7 @@ export function useDesign(code: string) {
       if (message.id !== requestId.current) return
       window.clearTimeout(timerRef.current)
       setBuilding(false)
+      setRevision((value) => value + 1)
       if (!message.ok) {
         setError(message.error)
         return
@@ -64,6 +66,7 @@ export function useDesign(code: string) {
     }
     worker.onerror = () => {
       setBuilding(false)
+      setRevision((value) => value + 1)
       setError('errWorker')
     }
     workerRef.current = worker
@@ -89,6 +92,7 @@ export function useDesign(code: string) {
     timerRef.current = window.setTimeout(() => {
       if (requestId.current !== id) return
       setBuilding(false)
+      setRevision((value) => value + 1)
       setError('errTimeout')
       spawn()
     }, 45000)
@@ -120,6 +124,7 @@ export function useDesign(code: string) {
     resetParams,
     error,
     building,
+    revision,
     elapsed,
     triangles,
     rebuild,
