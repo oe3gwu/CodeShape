@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { useDesign } from './hooks/useDesign'
 import { EditorWindow } from './layout/EditorWindow'
 import { FeaturePanel } from './layout/FeaturePanel'
+import { FileBrowser } from './layout/FileBrowser'
 import { GithubBrowser } from './layout/GithubBrowser'
 import { InferenceWindow } from './layout/InferenceWindow'
 import { ParameterDialog } from './layout/ParameterDialog'
@@ -9,12 +10,17 @@ import { SideRail } from './layout/SideRail'
 import { TopBar } from './layout/TopBar'
 import { displayError, useI18n, type MessageKey } from './i18n'
 import { downloadBlob, meshesToObj, meshesToStl } from './lib/export'
+import { displayPath, expandLocalIncludes, writeFileText } from './lib/files'
+import { IncludeMissingError } from './lib/github'
 import { loadPersisted, savePersisted } from './lib/storage'
 import { SAMPLE, SAMPLE_NAME } from './sample'
 import type { PlaneKey, Planes, Projection, RenderMode, SavedView, Theme } from './types'
 import { Viewport, type ViewportHandle } from './viewer/Viewport'
 
 const renderModes: RenderMode[] = ['shaded-edges', 'shaded', 'translucent', 'wire']
+const editorMin = 320
+const editorMax = 1520
+const editorDefault = 880
 
 function isTyping(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
@@ -38,13 +44,18 @@ export function App() {
   const saved = useRef(loadPersisted()).current
   const [theme, setTheme] = useState<Theme>(saved.theme === 'dark' ? 'dark' : 'light')
   const [code, setCode] = useState(saved.code || SAMPLE)
+  const [modelCode, setModelCode] = useState(saved.code || SAMPLE)
   const [docName, setDocName] = useState(saved.docName || SAMPLE_NAME)
   const [editorOpen, setEditorOpen] = useState(saved.editorOpen !== false)
   const [treeOpen, setTreeOpen] = useState(saved.treeOpen !== false)
-  const [sideMode, setSideMode] = useState<'local' | 'github'>(saved.sideMode === 'github' ? 'github' : 'local')
+  const [sideMode, setSideMode] = useState<'local' | 'files' | 'github'>(saved.sideMode === 'github' || saved.sideMode === 'files' ? saved.sideMode : 'local')
   const [githubUrl, setGithubUrl] = useState(saved.githubUrl ?? '')
+  const [filesPath, setFilesPath] = useState(saved.filesPath ?? '')
+  const [sourcePath, setSourcePath] = useState(saved.sourcePath ?? '')
+  const [includeError, setIncludeError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [treeWidth, setTreeWidth] = useState(clamp(saved.treeWidth ?? 286, 220, 460))
-  const [editorWidth, setEditorWidth] = useState(clamp(saved.editorWidth ?? 440, 320, 760))
+  const [editorWidth, setEditorWidth] = useState(clamp(saved.editorWidth && saved.editorWidth !== 440 ? saved.editorWidth : editorDefault, editorMin, editorMax))
   const [chatOpen, setChatOpen] = useState(saved.chatOpen !== false)
   const [chatHeight, setChatHeight] = useState(clamp(saved.chatHeight ?? 196, 120, 420))
   const [renderMode, setRenderMode] = useState<RenderMode>(saved.renderMode && renderModes.includes(saved.renderMode) ? saved.renderMode : 'shaded-edges')
@@ -57,7 +68,12 @@ export function App() {
   const [help, setHelp] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const viewportRef = useRef<ViewportHandle>(null)
-  const design = useDesign(code)
+  const codeRef = useRef(code)
+  const sourcePathRef = useRef(sourcePath)
+  const expandGen = useRef(0)
+  codeRef.current = code
+  sourcePathRef.current = sourcePath
+  const design = useDesign(modelCode)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -66,10 +82,42 @@ export function App() {
   }, [theme, docName, lang])
 
   useEffect(() => {
-    savePersisted({ code, theme, lang, docName, editorOpen, treeOpen, sideMode, githubUrl, treeWidth, editorWidth, chatOpen, chatHeight, renderMode, projection, planes, ...(view ? { view } : {}) })
-  }, [code, theme, lang, docName, editorOpen, treeOpen, sideMode, githubUrl, treeWidth, editorWidth, chatOpen, chatHeight, renderMode, projection, planes, view])
+    savePersisted({ code, theme, lang, docName, editorOpen, treeOpen, sideMode, githubUrl, filesPath, sourcePath, treeWidth, editorWidth, chatOpen, chatHeight, renderMode, projection, planes, ...(view ? { view } : {}) })
+  }, [code, theme, lang, docName, editorOpen, treeOpen, sideMode, githubUrl, filesPath, sourcePath, treeWidth, editorWidth, chatOpen, chatHeight, renderMode, projection, planes, view])
 
-  const save = () => downloadBlob(new Blob([code], { type: 'text/javascript' }), `${docName || 'CodeShape'}.js`)
+  useEffect(() => {
+    const gen = ++expandGen.current
+    if (!sourcePath) {
+      setModelCode(code)
+      setIncludeError(null)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      void expandLocalIncludes(code, sourcePath).then((expanded) => {
+        if (expandGen.current !== gen) return
+        setModelCode(expanded)
+        setIncludeError(null)
+      }).catch((caught: unknown) => {
+        if (expandGen.current !== gen) return
+        setIncludeError(caught instanceof IncludeMissingError ? `${t('includeMissing')}: ${caught.spec}` : t('filesReadFailed'))
+      })
+    }, 160)
+    return () => window.clearTimeout(timer)
+  }, [code, sourcePath, t])
+
+  const save = () => {
+    const text = codeRef.current
+    const target = sourcePathRef.current
+    if (target) {
+      void writeFileText(target, text).then(
+        () => setSaveError(null),
+        () => setSaveError(t('filesSaveFailed')),
+      )
+      return
+    }
+    setSaveError(null)
+    downloadBlob(new Blob([text], { type: 'text/javascript' }), `${docName || 'CodeShape'}.js`)
+  }
 
   const resetView = () => {
     setHidden({})
@@ -79,9 +127,34 @@ export function App() {
   }
 
   const onNew = () => {
+    codeRef.current = SAMPLE
+    sourcePathRef.current = ''
     setCode(SAMPLE)
+    setSourcePath('')
     setDocName(SAMPLE_NAME)
+    setIncludeError(null)
+    setSaveError(null)
     resetView()
+  }
+
+  const rebuildModel = () => {
+    const source = codeRef.current
+    const target = sourcePathRef.current
+    const gen = ++expandGen.current
+    const apply = (expanded: string) => {
+      if (expandGen.current !== gen) return
+      setIncludeError(null)
+      setModelCode(expanded)
+      design.rebuild()
+    }
+    if (!target) {
+      apply(source)
+      return
+    }
+    void expandLocalIncludes(source, target).then(apply, (caught: unknown) => {
+      if (expandGen.current !== gen) return
+      setIncludeError(caught instanceof IncludeMissingError ? `${t('includeMissing')}: ${caught.spec}` : t('filesReadFailed'))
+    })
   }
 
   const onExport = (kind: 'stl' | 'obj') => {
@@ -108,12 +181,12 @@ export function App() {
       }
       if (event.shiftKey && event.key === 'Enter' && !isTyping(event.target)) {
         event.preventDefault()
-        design.rebuild()
+        rebuildModel()
         return
       }
       if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
         event.preventDefault()
-        design.rebuild()
+        rebuildModel()
         return
       }
       if (isTyping(event.target)) return
@@ -134,7 +207,7 @@ export function App() {
     const move = (pointer: globalThis.PointerEvent) => {
       const delta = (horizontal ? pointer.clientX : pointer.clientY) - origin
       if (which === 'tree') setTreeWidth(clamp(start + delta, 220, 460))
-      else if (which === 'editor') setEditorWidth(clamp(start - delta, 320, 760))
+      else if (which === 'editor') setEditorWidth(clamp(start - delta, editorMin, editorMax))
       else setChatHeight(clamp(start - delta, 120, 420))
     }
     const up = () => {
@@ -160,7 +233,7 @@ export function App() {
     savePersisted({ view: next })
   }
 
-  const selectSide = (next: 'local' | 'github') => {
+  const selectSide = (next: 'local' | 'files' | 'github') => {
     if (treeOpen && sideMode === next) setTreeOpen(false)
     else {
       setSideMode(next)
@@ -169,13 +242,30 @@ export function App() {
   }
 
   const openGithubModel = (nextCode: string, nextName: string) => {
+    codeRef.current = nextCode
+    sourcePathRef.current = ''
     setCode(nextCode)
+    setSourcePath('')
     setDocName(nextName)
+    setIncludeError(null)
+    setSaveError(null)
     setEditorOpen(true)
     resetView()
   }
 
-  const shownError = design.error ? displayError(design.error, t) : null
+  const openLocalFile = (nextCode: string, nextName: string, path: string) => {
+    codeRef.current = nextCode
+    sourcePathRef.current = path
+    setCode(nextCode)
+    setSourcePath(path)
+    setDocName(nextName)
+    setIncludeError(null)
+    setSaveError(null)
+    setEditorOpen(true)
+    resetView()
+  }
+
+  const shownError = includeError ?? (design.error ? displayError(design.error, t) : null) ?? saveError
 
   return (
     <div className="cs-app">
@@ -195,7 +285,7 @@ export function App() {
         onOpen={() => fileRef.current?.click()}
         onSave={save}
         onExport={onExport}
-        onRebuild={design.rebuild}
+        onRebuild={rebuildModel}
         onFit={() => viewportRef.current?.fit()}
         onIso={() => viewportRef.current?.setView('iso')}
         onToggleEditor={() => setEditorOpen((open) => !open)}
@@ -213,6 +303,8 @@ export function App() {
           <div className="cs-tree-wrap" style={{ width: treeWidth }}>
             {sideMode === 'github' ? (
               <GithubBrowser url={githubUrl} onUrl={setGithubUrl} onOpen={openGithubModel} />
+            ) : sideMode === 'files' ? (
+              <FileBrowser path={filesPath} activePath={sourcePath} onPath={setFilesPath} onOpen={openLocalFile} />
             ) : (
               <FeaturePanel
                 docName={docName}
@@ -266,8 +358,12 @@ export function App() {
               theme={theme}
               docName={docName}
               building={design.building}
-              onChange={setCode}
-              onRebuild={design.rebuild}
+              onChange={(next) => {
+                codeRef.current = next
+                setCode(next)
+              }}
+              onRebuild={rebuildModel}
+              onSave={save}
               onClose={() => setEditorOpen(false)}
             />
           </div>
@@ -282,6 +378,7 @@ export function App() {
           {design.building ? t('building') : shownError ? shownError : `${design.triangles.toLocaleString(lang === 'de' ? 'de-DE' : 'en-US')} ${t('triangles')} · ${design.elapsed} ms`}
         </div>
         <div className="cs-status-meta">
+          {sourcePath ? <span className="cs-status-path" title={displayPath(sourcePath)}>{displayPath(sourcePath)}</span> : null}
           <span>{t(modeKey[renderMode])}</span>
           <span>{projection === 'ortho' ? t('ortho') : t('perspective')}</span>
         </div>
@@ -316,7 +413,12 @@ export function App() {
           event.target.value = ''
           if (!file) return
           file.text().then((text) => {
+            codeRef.current = text
+            sourcePathRef.current = ''
             setCode(text)
+            setSourcePath('')
+            setIncludeError(null)
+            setSaveError(null)
             setDocName(file.name.replace(/\.(js|txt|jscad)$/i, '') || SAMPLE_NAME)
             resetView()
           })

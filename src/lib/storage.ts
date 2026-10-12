@@ -16,8 +16,10 @@ export type Persisted = {
   projection?: Projection
   planes?: Planes
   view?: SavedView
-  sideMode?: 'local' | 'github'
+  sideMode?: 'local' | 'files' | 'github'
   githubUrl?: string
+  filesPath?: string
+  sourcePath?: string
 }
 
 const KEY = 'codeshape.v1'
@@ -30,8 +32,10 @@ export function loadPersisted(): Persisted {
     if (!data || typeof data !== 'object') return {}
     data.planes = readPlanes(data.planes)
     data.view = readView(data.view)
-    if (data.sideMode !== 'local' && data.sideMode !== 'github') delete data.sideMode
+    if (data.sideMode !== 'local' && data.sideMode !== 'files' && data.sideMode !== 'github') delete data.sideMode
     if (typeof data.githubUrl !== 'string') delete data.githubUrl
+    if (!isSafeRel(data.filesPath)) delete data.filesPath
+    if (!isSafeRel(data.sourcePath)) delete data.sourcePath
     return data
   } catch {
     return {}
@@ -41,6 +45,12 @@ export function loadPersisted(): Persisted {
 export function savePersisted(data: Partial<Persisted>) {
   const prev = loadPersisted()
   localStorage.setItem(KEY, JSON.stringify({ ...prev, ...data }))
+}
+
+function isSafeRel(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 4096) return false
+  if (value.includes('\0') || value.includes('\\') || value.startsWith('/')) return false
+  return value.split('/').every((part) => part !== '..' && part !== '.')
 }
 
 function readPlanes(value: unknown): Planes | undefined {

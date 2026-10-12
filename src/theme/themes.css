@@ -342,8 +342,8 @@ button.cs-feature-row { cursor: pointer; }
 }
 .cs-siderail button:hover { background: var(--cs-hover); color: var(--cs-text); }
 .cs-siderail button.is-on { background: var(--cs-hover); color: var(--cs-text); }
-.cs-github-bar { padding: 8px 8px 0; }
-.cs-github-bar input {
+.cs-github-bar, .cs-browser-bar { padding: 8px 8px 0; }
+.cs-github-bar input, .cs-browser-bar input {
   width: 100%;
   height: 28px;
   padding: 0 8px;
@@ -352,7 +352,7 @@ button.cs-feature-row { cursor: pointer; }
   background: var(--cs-input);
   color: var(--cs-text);
 }
-.cs-github-bar input:focus { outline: none; border-color: var(--cs-accent); }
+.cs-github-bar input:focus, .cs-browser-bar input:focus { outline: none; border-color: var(--cs-accent); }
 
 .cs-rail {
   width: 32px;
@@ -557,7 +557,8 @@ body.is-resizing-row, body.is-resizing-row * { cursor: row-resize !important; }
 .cs-tab-mark { width: 8px; height: 8px; background: var(--cs-accent); }
 .cs-status-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-status-text.is-error { color: var(--cs-danger); }
-.cs-status-meta { display: flex; gap: 12px; }
+.cs-status-meta { display: flex; gap: 12px; min-width: 0; }
+.cs-status-path { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .cs-modal-back {
   position: fixed;

@@ -15,19 +15,22 @@ type Props = {
   building: boolean
   onChange: (code: string) => void
   onRebuild: () => void
+  onSave: () => void
   onClose: () => void
 }
 
-export function EditorWindow({ code, theme, docName, building, onChange, onRebuild, onClose }: Props) {
+export function EditorWindow({ code, theme, docName, building, onChange, onRebuild, onSave, onClose }: Props) {
   const { t } = useI18n()
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const themeCompartment = useRef(new Compartment())
   const onChangeRef = useRef(onChange)
   const onRebuildRef = useRef(onRebuild)
+  const onSaveRef = useRef(onSave)
   const initialCode = useRef(code)
   onChangeRef.current = onChange
   onRebuildRef.current = onRebuild
+  onSaveRef.current = onSave
 
   useEffect(() => {
     if (!hostRef.current) return
@@ -37,14 +40,24 @@ export function EditorWindow({ code, theme, docName, building, onChange, onRebui
         doc: initialCode.current,
         extensions: [
           basicSetup,
-          Prec.high(keymap.of([{
-            key: 'Shift-Enter',
-            preventDefault: true,
-            run: () => {
-              onRebuildRef.current()
-              return true
+          Prec.high(keymap.of([
+            {
+              key: 'Shift-Enter',
+              preventDefault: true,
+              run: () => {
+                onRebuildRef.current()
+                return true
+              },
             },
-          }])),
+            {
+              key: 'Mod-s',
+              preventDefault: true,
+              run: () => {
+                onSaveRef.current()
+                return true
+              },
+            },
+          ])),
           javascript(),
           EditorState.tabSize.of(2),
           themeCompartment.current.of(theme === 'dark' ? oneDark : []),
