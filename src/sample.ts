@@ -1,50 +1,114 @@
-export const SAMPLE_NAME = 'Gehäuse'
+export const SAMPLE_NAME = 'Primitive'
 
-export const SAMPLE = `const jscad = require('@jscad/modeling')
-const { roundedCuboid, cuboid, cylinder } = jscad.primitives
-const { subtract, union } = jscad.booleans
-const { translate } = jscad.transforms
-const { colorize } = jscad.colors
+export const SAMPLE = `// This sketch combines two JSCAD demonstrations: 3D Primitives and Transparency
 
-const getParameterDefinitions = () => [
-  { name: 'laenge', caption: 'Länge', type: 'float', initial: 112, min: 70, max: 180, step: 1 },
-  { name: 'breite', caption: 'Breite', type: 'float', initial: 64, min: 40, max: 120, step: 1 },
-  { name: 'hoehe', caption: 'Höhe', type: 'float', initial: 28, min: 14, max: 60, step: 1 },
-  { name: 'radius', caption: 'Kantenradius', type: 'float', initial: 6, min: 1, max: 14, step: 0.5 },
-  { name: 'bohrung', caption: 'Bohrung', type: 'float', initial: 6.5, min: 2, max: 16, step: 0.5 },
-]
+/**
+ * 3D Primitives Demonstration
+ * @category Creating Shapes
+ * @skillLevel 1
+ * @description Demonstrating the basics of a variety of 3D primitives
+ * @tags cube, cuboid, sphere, ellipsoid, cylinder, torus, shape, 3d
+ * @authors Rene K. Mueller, Moissette Mark, Simon Clark
+ * @licence MIT License
+ */
 
-const main = (p) => {
-  const radius = Math.max(0.6, Math.min(p.radius, p.hoehe / 2 - 0.4, p.breite / 4, p.laenge / 4))
-  let body = roundedCuboid({
-    size: [p.laenge, p.breite, p.hoehe],
-    roundRadius: radius,
-    segments: 8,
-  })
-  body = translate([0, 0, p.hoehe / 2], body)
+/**
+ * Transparency
+ * @category Colors
+ * @skillLevel 2
+ * @description showing transparent objects
+ * @tags colors, transparency, hsltorgb
+ * @authors Rene K. Mueller, Moissette Mark, Simon Clark
+ * @licence MIT License
+ */
 
-  const hole = (x) => translate(
-    [x, 0, p.hoehe / 2],
-    cylinder({ radius: p.bohrung / 2, height: p.hoehe + 8, segments: 32 }),
+import { colors, primitives, transforms } from '@jscad/modeling'
+const { colorize, hslToRgb, colorNameToRgb } = colors
+const {
+  cube,
+  cuboid,
+  roundedCuboid,
+  roundedCylinder,
+  sphere,
+  geodesicSphere,
+  ellipsoid,
+  cylinder,
+  cylinderElliptic,
+  torus,
+} = primitives
+const { translate } = transforms
+
+export const main = () => {
+  const shapes = []
+  for (let i = 6; i >= 0; i--) {
+    // reverse order for seeing through all cylinders (see http://www.opengl.org/wiki/Transparency_Sorting)
+    const shapeColor = hslToRgb(i / 8, 1, 0.5, (i + 1) / 8) // hslToRGB can accept a transparency value as well.
+    shapes.push(
+      colorize(
+        shapeColor,
+        translate([(i - 3) * 7.5, 0, 0], cylinder({ radius: 3, height: 20 })),
+      ),
+    )
+  }
+  shapes.push(
+    colorize(
+      colorNameToRgb('red'),
+      translate([-4, -10, 0], cuboid({ size: [5, 5, 5] })),
+    ),
   )
-  body = subtract(body, hole(-p.laenge * 0.28), hole(p.laenge * 0.28))
-
-  const band = translate(
-    [0, -p.breite / 2 + 3.4, p.hoehe * 0.62],
-    cuboid({ size: [p.laenge * 0.72, 3.4, 5.2] }),
+  shapes.push(
+    colorize(
+      [1, 0, 0, 0.5],
+      translate([4, -10, 0], cuboid({ size: [5, 5, 5] })),
+    ),
   )
 
-  const key = (x, y) => translate(
-    [x, y, p.hoehe + 1.15],
-    roundedCuboid({ size: [18, 11, 2.5], roundRadius: 1.2, segments: 4 }),
-  )
-
-  return [
-    colorize([0.45, 0.49, 0.55, 1], body),
-    colorize([0.86, 0.87, 0.9, 1], band),
-    colorize([0.16, 0.17, 0.19, 1], union(key(-14, 8), key(12, 10))),
+  const allPrimitives = [
+    cube(),
+    cuboid({ size: [1, 2, 3] }),
+    roundedCuboid({ size: [2, 3, 2], roundRadius: 0.4, segments: 32 }),
+    roundedCuboid({ size: [1, 2, 3], roundRadius: 0.4, segments: 16 }),
+    sphere({ radius: 2, segments: 16 }),
+    geodesicSphere({ radius: 1.5, segments: 16 }),
+    ellipsoid({
+      radius: [2, 1, 1.5],
+      segments: 64,
+      axes: [
+        [1, 1, 0],
+        [0, -1, 1],
+        [-1, 0, 1],
+      ],
+    }),
+    cylinder({ radius: 1, height: 5 }),
+    roundedCylinder({ radius: 1, height: 8, roundRadius: 0.8 }),
+    cylinderElliptic({
+      height: 8,
+      startRadius: [1, 2],
+      startAngle: 0,
+      endRadius: [1, 2],
+      endAngle: Math.PI / 8,
+      segments: 32,
+    }),
+    cylinder({ start: [0, 0, 0], end: [3, 3, 10], radius: 1 }),
+    torus({ innerRadius: 1, outerRadius: 1.2 }),
+    torus({
+      innerRadius: 1,
+      outerRadius: 1.5,
+      innerSegments: 4,
+      outerSegments: 6,
+      innerRotation: 0,
+    }),
   ]
-}
 
-module.exports = { main, getParameterDefinitions }
+  allPrimitives
+    .map((primitive, index) => {
+      return translate(
+        [10 + ((index % 4) - 2) * 6, Math.floor(index / 4 - 2) * 6, 30],
+        primitive,
+      )
+    })
+    .forEach(p => shapes.push(p))
+
+  return shapes
+}
 `
